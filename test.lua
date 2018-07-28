@@ -25,6 +25,8 @@ rules = ZSS:new [[
 
 	*[ttc<1.5]  { effect:flash(0.2) }
 	bbox { fill:false; stroke-opacity:0.2 }
+	*[speed] { speed:true }
+	#accel { stroke:color('green') }
 ]]
 
 -- add a second document (can also load from a file)
@@ -34,88 +36,6 @@ rules:add [[
 	text { fill:orange }
 ]]
 
-p( rules:match('text') )
---> {
--->   fill = "orange",
--->   font = "main",
--->   opacity = 0.5,
--->   size = 12,
--->   stroke = false,
--->   ["stroke-width"] = 1
---> }
+p( rules:match{ } )
+p( rules:match{ id='accl', type='text', tags={danger=1,debug=1}, data={speed=-5} } )
 
-
-p( rules:match('text.danger') )
---> {
--->   effect = "glow(yellow,3)",
--->   fill = "rgba(2,0,0)",
--->   font = "main",
--->   opacity = 0.5,
--->   size = 18,
--->   stroke = false,
--->   ["stroke-width"] = 1
---> }
-
-
-p( rules:match('text.detection') )
---> {
--->   fill = "green",
--->   font = "main",
--->   opacity = 0.5,
--->   size = 8,
--->   stroke = "yellow",
--->   ["stroke-width"] = 2
---> }
-
-
-p( rules:match('bbox.detection') )
---> {
--->   fill = "#ffff0033",
--->   font = "main",
--->   stroke = "yellow",
--->   ["stroke-opacity"] = 0.2,
--->   ["stroke-width"] = 2
---> }
-
-
-p( rules:match('.danger.pedestrian') )
---> {
--->   effect = "glow(yellow,3)",
--->   fill = "purple",
--->   ["fill-opacity"] = 0.3,
--->   font = "main",
--->   size = 18,
--->   stroke = "magenta",
--->   ["stroke-width"] = 1
---> }
-
-
-p( rules:match('.pedestrian.child') )
---> {
--->   fill = "purple",
--->   ["fill-opacity"] = 0.8,
--->   font = "main",
--->   stroke = "magenta",
--->   ["stroke-width"] = 1
---> }
-
-
-p( rules:match('.pedestrian[ttc=2.0]') )
---> {
--->   fill = "purple",
--->   ["fill-opacity"] = 0.3,
--->   font = "main",
--->   stroke = "magenta",
--->   ["stroke-width"] = 1
---> }
-
-
-p( rules:match('.pedestrian[ttc=0.5]') )
---> {
--->   effect = "flash(0.2)",
--->   fill = "purple",
--->   ["fill-opacity"] = 0.3,
--->   font = "main",
--->   stroke = "magenta",
--->   ["stroke-width"] = 1
---> }

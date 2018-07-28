@@ -2,7 +2,7 @@ local ZSS = {}
 ZSS.__index = ZSS
 
 function ZSS:new(...)
-	local zss = setmetatable({docs={}, rules={}, directives={}, computed={}},ZSS)
+	local zss = setmetatable({rules={}, directives={}, computed={}},ZSS)
 	for _,css in ipairs{...} do zss:parse(css) end
 	return zss
 end
@@ -10,7 +10,7 @@ end
 function ZSS:load(filename)
 	local file = io.open(filename)
 	if file then
-		self:parse(file:read('*all'), filename)
+		self:parse(file:read('*all'))
 		file:close()
 	end
 	return self
@@ -28,44 +28,52 @@ local function value(str)
 	return result
 end
 
-function ZSS.parse_selector(selector_str)
+function ZSS.parse_selector(selector_str, from_data)
 	if selector_str:match('^@[%a_][%w_-]*$') then
 		return {directive=selector_str}
 	else
 		local selector = {
 			type = selector_str:match('^[%a_][%w_-]*'),
 			id  = selector_str:match('#([%a_][%w_-]*)'),
-			classes={}, attributes={}
+			tags={}, data={}
 		}
 
-		-- https://www.w3.org/TR/2018/CR-selectors-3-20180130/#specificity
-		-- with document number and rule number appended
-
-		for class in selector_str:gmatch('%.([%a_][%w_-]*)') do
-			selector.classes[class] = true
-			selector.classes[#selector.classes+1] = class
+		for name in selector_str:gmatch('%.([%a_][%w_-]*)') do
+			selector.tags[name] = true
+			if not from_data then
+				selector.tags[#selector.tags+1] = name
+			end
 		end
-		table.sort(selector.classes)
+		if not from_data then
+			table.sort(selector.tags)
+		end
 
-		for name in selector_str:gmatch('%[%s*([%a_][%w_-]*)%s*%]') do
-			selector.attributes[name] = true
-			selector.attributes[#selector.attributes+1] = name
+		if not from_data then
+			for name in selector_str:gmatch('%[%s*([%a_][%w_-]*)%s*%]') do
+				selector.data[name] = true
+				selector.data[#selector.data+1] = name
+			end
 		end
 
 		for name, op, val in selector_str:gmatch('%[%s*([%a_][%w_-]*)%s*([<=>])%s*(.-)%s*%]') do
-			selector.attributes[name] = { op=op, value=value(val) }
-			selector.attributes[#selector.attributes+1] = name
+			if from_data then
+				if op=='=' then
+					selector.data[name] = value(val)
+				end
+			else
+				selector.data[name] = { op=op, value=value(val) }
+				selector.data[#selector.data+1] = name
+			end
 		end
-		table.sort(selector.attributes)
+		if not from_data then
+			table.sort(selector.data)
+		end
 
 		return selector
 	end
 end
 
-function ZSS:parse(css, docname)
-	table.insert(self.docs, docname or "(raw string)")
-
-	local rulenum = 1
+function ZSS:parse(css)
 	for rule_str in css:gsub('/%*.-%*/',''):gmatch('[^%s].-}') do
 		-- Convert declarations into a table mapping property to value
 		local decl_str = rule_str:match('{%s*(.-)%s*}')
@@ -84,15 +92,13 @@ function ZSS:parse(css, docname)
 			else
 				selector.rank = {
 					selector.id and 1 or 0,
-					#selector.classes + #selector.attributes,
+					#selector.tags + #selector.data,
 					selector.type and 1 or 0,
-					#self.docs,
-					rulenum
+					#self.rules
 				}
 				table.insert(self.rules, {selector=selector, declarations=declarations})
 			end
 		end
-		rulenum = rulenum + 1
 	end
 	self.computed = {}
 	self:sortrules()
@@ -106,70 +112,54 @@ function ZSS:sortrules()
 		if     r1[1]<r2[1] then return true elseif r1[1]>r2[1] then return false
 		elseif r1[2]<r2[2] then return true elseif r1[2]>r2[2] then return false
 		elseif r1[3]<r2[3] then return true elseif r1[3]>r2[3] then return false
-		elseif r1[4]<r2[4] then return true elseif r1[4]>r2[4] then return false
-		elseif r1[5]<r2[5] then return true else                      return false
+		elseif r1[4]<r2[4] then return true else                    return false
 		end
 	end)
 	return self
 end
 
 function ZSS:match(el)
-	local signature
+	local signagure
 	if type(el)=='string' then
 		signature = el
-	else
-		signature = el.type or '*'
-		if el.id then
-			signature = signature..'#'..el.id
+		if self.computed[signature] then
+			return self.computed[signature]
+		else
+			el = ZSS.parse_selector(signature, true)
 		end
-		if el.classes[1] then
-			signature = signature..'.'..table.concat(el.classes,'.')
-		end
-		if el.attributes[1] then
-			for _,name in ipairs(el.attributes) do
-				local attr = el.attributes[name]
-				signature = signature..'['..name
-				if attr.op then signature = signature..attr.op..attr.value end
-				signature = signature..']'
+	end
+
+	local computed = {}
+	for _,rule in ipairs(self.rules) do
+		if ZSS.matches(rule.selector, el) then
+			for k,v in pairs(rule.declarations) do
+				computed[k] = v
 			end
 		end
 	end
 
-	if not self.computed[signature] then
-		if type(el)=='string' then
-			el = ZSS.parse_selector(signature)
-		end
-		local decls = {}
-		for _,rule in ipairs(self.rules) do
-			if ZSS.matches(rule.selector, el) then
-				for k,v in pairs(rule.declarations) do
-					decls[k] = v
-				end
-			end
-		end
-		self.computed[signature] = decls
+	if signature then
+		self.computed[signature] = computed
 	end
 
-	return self.computed[signature]
+	return computed
 end
 
 function ZSS.matches(selector, el)
 	if selector.type and el.type~=selector.type then return false end
-	if selector.id  and el.id~=selector.id   then return false end
-	for _,class in ipairs(selector.classes) do
-		if not el.classes[class] then return false end
+	if selector.id   and el.id~=selector.id     then return false end
+	for _,tag in ipairs(selector.tags) do
+		if not (el.tags and el.tags[tag]) then return false end
 	end
-	for _,name in ipairs(selector.attributes) do
-		if not el.attributes[name] then return false end
-		local sattr = selector.attributes[name]
-		local eattr = el.attributes[name]
-		if sattr.op then
-			if sattr.op=='=' then
-				if sattr.value~=eattr.value then return false end
-			elseif sattr.op=='<' then
-				if sattr.value<=eattr.value then return false end
-			elseif sattr.op=='>' then
-				if sattr.value>=eattr.value then return false end
+	for _,name in ipairs(selector.data) do
+		local val = el.data and el.data[name]
+		if not val then return false end
+
+		local attr = selector.data[name]
+		if attr~=true then
+			if     attr.op=='=' then if attr.value~=val then return false end
+			elseif attr.op=='<' then if attr.value<=val then return false end
+			elseif attr.op=='>' then if attr.value>=val then return false end
 			end
 		end
 	end
