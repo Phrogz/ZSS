@@ -51,18 +51,17 @@ function ZSS.parse_selector(selector_str)
 		end
 
 		for name, op, val in selector_str:gmatch('%[%s*([%a_][%w_-]*)%s*([<=>])%s*(.-)%s*%]') do
-			selector.attributes[name] = { op=op, value=tonumber(val) }
+			selector.attributes[name] = { op=op, value=tonumber(val) or val }
 			selector.attributes[#selector.attributes+1] = name
 		end
 		table.sort(selector.attributes)
 
 		return selector
 	end
-
 end
 
 function ZSS:parse(css, docname)
-	table.insert(self.docs, docname or "(supplied code)")
+	table.insert(self.docs, docname or "(raw string)")
 
 	local rulenum = 1
 	for rule_str in css:gsub('/%*.-%*/',''):gmatch('[^%s].-}') do
@@ -70,7 +69,7 @@ function ZSS:parse(css, docname)
 		local decl_str = rule_str:match('{%s*(.-)%s*}')
 		local declarations = {}
 		for key,value in decl_str:gmatch('([^%s]+)%s*:%s*([^;}]+)') do
-			declarations[key] = value
+			declarations[key] = tonumber(value) or value
 		end
 
 		-- Create a unique rule for each selector in the rule
@@ -97,6 +96,7 @@ function ZSS:parse(css, docname)
 	self:sortrules()
 	return self
 end
+ZSS.add = ZSS.parse
 
 function ZSS:sortrules()
 	table.sort(self.rules, function(r1, r2)
@@ -109,29 +109,6 @@ function ZSS:sortrules()
 		end
 	end)
 	return self
-end
-
-function ZSS.matches(selector, el)
-	if selector.tag and el.tag~=selector.tag then return false end
-	if selector.id  and el.id~=selector.id   then return false end
-	for _,class in ipairs(selector.classes) do
-		if not el.classes[class] then return false end
-	end
-	for _,name in ipairs(selector.attributes) do
-		if not el.attributes[name] then return false end
-		local sattr = selector.attributes[name]
-		local eattr = el.attributes[name]
-		if sattr.op then
-			if sattr.op=='=' then
-				if sattr.value~=eattr.value then return false end
-			elseif sattr.op=='<' then
-				if sattr.value<=eattr.value then return false end
-			elseif sattr.op=='>' then
-				if sattr.value>=eattr.value then return false end
-			end
-		end
-	end
-	return true
 end
 
 function ZSS:match(el)
@@ -172,6 +149,29 @@ function ZSS:match(el)
 	end
 
 	return self.computed[signature]
+end
+
+function ZSS.matches(selector, el)
+	if selector.tag and el.tag~=selector.tag then return false end
+	if selector.id  and el.id~=selector.id   then return false end
+	for _,class in ipairs(selector.classes) do
+		if not el.classes[class] then return false end
+	end
+	for _,name in ipairs(selector.attributes) do
+		if not el.attributes[name] then return false end
+		local sattr = selector.attributes[name]
+		local eattr = el.attributes[name]
+		if sattr.op then
+			if sattr.op=='=' then
+				if sattr.value~=eattr.value then return false end
+			elseif sattr.op=='<' then
+				if sattr.value<=eattr.value then return false end
+			elseif sattr.op=='>' then
+				if sattr.value>=eattr.value then return false end
+			end
+		end
+	end
+	return true
 end
 
 return ZSS
