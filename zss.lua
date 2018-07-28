@@ -7,16 +7,6 @@ function ZSS:new(...)
 	return zss
 end
 
--- https://stackoverflow.com/a/1647577/405017
-local function split(str, pat)
-  local st, g = 1, str:gmatch("()("..(pat or '%s+')..")")
-  local function getter(segs, seps, sep, cap1, ...)
-    st = sep and seps + #sep
-    return str:sub(segs, (seps or 0) - 1), cap1 or sep, ...
-  end
-  return function() if st then return getter(st, g()) end end
-end
-
 function ZSS:load(filename)
 	local file = io.open(filename)
 	if file then
@@ -26,12 +16,24 @@ function ZSS:load(filename)
 	return self
 end
 
+local function value(str)
+	local result = tonumber(str)
+	if not result then
+		str = str:gsub("^'(.-)'$", '%1'):gsub('^"(.-)"$', '%1')
+		if     str=='true'  then result=true
+		elseif str=='false' then result=false
+		else                     result=str
+		end
+	end
+	return result
+end
+
 function ZSS.parse_selector(selector_str)
 	if selector_str:match('^@[%a_][%w_-]*$') then
 		return {directive=selector_str}
 	else
 		local selector = {
-			tag = selector_str:match('^[%a_][%w_-]*'),
+			type = selector_str:match('^[%a_][%w_-]*'),
 			id  = selector_str:match('#([%a_][%w_-]*)'),
 			classes={}, attributes={}
 		}
@@ -51,7 +53,7 @@ function ZSS.parse_selector(selector_str)
 		end
 
 		for name, op, val in selector_str:gmatch('%[%s*([%a_][%w_-]*)%s*([<=>])%s*(.-)%s*%]') do
-			selector.attributes[name] = { op=op, value=tonumber(val) or val }
+			selector.attributes[name] = { op=op, value=value(val) }
 			selector.attributes[#selector.attributes+1] = name
 		end
 		table.sort(selector.attributes)
@@ -68,14 +70,14 @@ function ZSS:parse(css, docname)
 		-- Convert declarations into a table mapping property to value
 		local decl_str = rule_str:match('{%s*(.-)%s*}')
 		local declarations = {}
-		for key,value in decl_str:gmatch('([^%s]+)%s*:%s*([^;}]+)') do
-			declarations[key] = tonumber(value) or value
+		for key,val in decl_str:gmatch('([^%s]+)%s*:%s*([^;}]+)') do
+			declarations[key] = value(val)
 		end
 
 		-- Create a unique rule for each selector in the rule
 		local selectors_str = rule_str:match('(.-)%s*{')
-		for selector_str in split(selectors_str, '%s*,%s*') do
-			local selector = ZSS.parse_selector(selector_str)
+		for selector_str in selectors_str:gmatch('%s*([^,]+)') do
+			local selector = ZSS.parse_selector(selector_str:match "^%s*(.-)%s*$")
 			if selector.directive then
 				selector.declarations = declarations
 				table.insert(self.directives, selector)
@@ -83,7 +85,7 @@ function ZSS:parse(css, docname)
 				selector.rank = {
 					selector.id and 1 or 0,
 					#selector.classes + #selector.attributes,
-					selector.tag and 1 or 0,
+					selector.type and 1 or 0,
 					#self.docs,
 					rulenum
 				}
@@ -116,7 +118,7 @@ function ZSS:match(el)
 	if type(el)=='string' then
 		signature = el
 	else
-		signature = el.tag or '*'
+		signature = el.type or '*'
 		if el.id then
 			signature = signature..'#'..el.id
 		end
@@ -152,7 +154,7 @@ function ZSS:match(el)
 end
 
 function ZSS.matches(selector, el)
-	if selector.tag and el.tag~=selector.tag then return false end
+	if selector.type and el.type~=selector.type then return false end
 	if selector.id  and el.id~=selector.id   then return false end
 	for _,class in ipairs(selector.classes) do
 		if not el.classes[class] then return false end
