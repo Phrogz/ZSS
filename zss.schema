@@ -1,0 +1,15 @@
+doc ::= (comment | rule)+
+comment ::= '/*' text-except-comment-close '*/'
+rule ::= ruleset '{' declaration? (';' declaration)* '}'
+ruleset ::= selector (',' selector)*
+selector ::= directive | tag? ('#' ID)? ('.' Name)* ('[' attribute ([<=>] value)? ']')*
+declaration ::= property ':' value
+value ::= Number | text | string
+text ::= [^ \t\r\n]+
+string ::= "'" [^'}] "'" | '"' [^"}] '"'
+directive ::= '@' Name
+tag ::= '*' | Name
+attribute ::= Name
+property ::= Name
+ID ::= Name
+Name ::= [A-Za-z] [A-Za-z_-]*
