@@ -3,14 +3,14 @@ ZSS.__index = ZSS
 
 function ZSS:new(...)
 	local zss = setmetatable({rules={}, directives={}, computed={}},ZSS)
-	for _,css in ipairs{...} do zss:parse(css) end
+	for _,css in ipairs{...} do zss:add(css) end
 	return zss
 end
 
 function ZSS:load(filename)
 	local file = io.open(filename)
 	if file then
-		self:parse(file:read('*all'))
+		self:add(file:read('*all'))
 		file:close()
 	end
 	return self
@@ -73,7 +73,7 @@ function ZSS.parse_selector(selector_str, from_data)
 	end
 end
 
-function ZSS:parse(css)
+function ZSS:add(css)
 	for rule_str in css:gsub('/%*.-%*/',''):gmatch('[^%s].-}') do
 		-- Convert declarations into a table mapping property to value
 		local decl_str = rule_str:match('{%s*(.-)%s*}')
@@ -104,7 +104,6 @@ function ZSS:parse(css)
 	self:sortrules()
 	return self
 end
-ZSS.add = ZSS.parse
 
 function ZSS:sortrules()
 	table.sort(self.rules, function(r1, r2)

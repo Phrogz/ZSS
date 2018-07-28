@@ -39,3 +39,18 @@ rules:add [[
 p( rules:match{ } )
 p( rules:match{ id='accl', type='text', tags={danger=1,debug=1}, data={speed=-5} } )
 
+require 'os'
+local count = 1000000
+local clock = os.clock
+local start = clock()
+for i=1,count do
+	rules:match{ id='accl', type='text', tags={danger=1,debug=1}, data={speed=-5} }
+end
+print( clock() - start )
+
+start = clock()
+for i=1,count do
+	rules:match('text#accl.danger.debug[speed='..math.random(100)..']')
+end
+print( clock() - start )
+
