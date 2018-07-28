@@ -2,7 +2,7 @@ local ZSS = {}
 ZSS.__index = ZSS
 
 function ZSS:new(...)
-	local zss = setmetatable({docs={}, rules={}, directives={}, computed={}, el_by_signature={}},ZSS)
+	local zss = setmetatable({docs={}, rules={}, directives={}, computed={}},ZSS)
 	for _,css in ipairs{...} do zss:parse(css) end
 	return zss
 end
