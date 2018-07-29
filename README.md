@@ -261,6 +261,6 @@ local m2 = sheet:match{ type='line', tags={debug=1} }
 
 # License & Contact
 
-ZSS is copyright ©2018 by Gavin Kistner and is licensed under the [MIT License](MIT License). See the LICENSE.txt file for more details.
+ZSS is copyright ©2018 by Gavin Kistner and is licensed under the [MIT License](http://www.opensource.org/licenses/mit-license.php). See the LICENSE.txt file for more details.
 
 For bugs or feature requests please [open issues on GitHub](https://github.com/Phrogz/ZSS/issues). For other communication you can [email the author directly](mailto:!@phrogz.net?subject=ZSS).
