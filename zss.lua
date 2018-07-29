@@ -25,7 +25,7 @@ end
 
 -- Usage: myZSS:load( 'file1.css', 'file2.css', ... )
 function ZSS:load(...)
-	for _,file in ipairs{...} do
+	for _,filename in ipairs{...} do
 		local file = io.open(filename)
 		if file then
 			self:add(file:read('*all'))
@@ -45,7 +45,7 @@ end
 
 -- Usage: myZSS:values{ none=false, false=false, transparent=Color(0,0,0,0) }
 function ZSS:values(valuemapping)
-	for k,v in pairs(valuemapping) do self._values[k]=v end
+	self._values = valuemapping
 	return self
 end
 
