@@ -82,8 +82,34 @@ sheet:match{ type=text, tags={debug=1}, data={speed=37} }
 -->   fill=<color 'white'>, opacity=0.2, size=20, stroke=<color 'white'> }
 ```
 
+## Descriptor Tables versus Strings
+
+As seen in the example above, you can describe an 'element' to find declarations for using either a table or a string. The two are equivalent in terms of _functionality_:
+
+```lua
+sheet:match{ type='line', id='forecast', tags={tag1=1,tag2=1}, data={ clouds=85 } }
+sheet:match'line#forecast.tag1.tag2[clouds=85]'
+```
+
+They differ in terms of performance and memory implications, however:
+
+* The table form is roughly 3–4× faster than the string form the _first_ time it is used. It causes a new table of computed declarations to be computed each time; this table is not retained by the library.
+* The string form is roughly 40× faster than the table form when the _exact_ same string has previously been seen. The string form causes the computed declarations table to be cached _forever_ in the library.
+
+If you have elements with roughly the same tags or data value that you use repeatedly throughout the lifespan of your application, pass a string to `match()`.
+
+If you have elements whose tags or (notably) attribute values are constantly changing, and unlikely to be seen again, pass a table to `match()`.
+
 
 # API
+
+* [`ZSS:new()`](#zssnewopts) — create a sheet
+* [`myZSS:values()`](#myzssvaluesvalue_map) — set value replacements
+* [`myZSS:handlers()`](#myzsshandlershandler_map) — set function handlers
+* [`myZSS:add()`](#myzssaddcss) — parse CSS from string
+* [`myZSS:load()`](#myzssload) — load CSS from file
+* [`myZSS:match()`](#myzssmatchelement_descriptor) — compute the declarations that apply to an element
+
 
 ## ZSS:new(opts)
 
@@ -94,7 +120,7 @@ sheet:match{ type=text, tags={debug=1}, data={speed=37} }
 * `basecss` — a string of CSS rules to initially parse for the stylesheet.
 * `files` — an array of string file names to load and parse after the `basecss`.
 
-Example:
+### Example:
 
 ```lua
 ZSS = require'zss'
@@ -107,7 +133,7 @@ local sheet = ZSS:new{
 ```
 
 Values can be set (replaced) later using the `values()` method.  
-Handlers can be set (added to) later using the `handlers()` method.  
+Handlers can be updated (added to) later using the `handlers()` method.  
 You can parse additional raw CSS at any time using the `add()` method.  
 You can load CSS files by name at any time using the `load()` method.
 
@@ -183,32 +209,54 @@ sheet:add[[
 ]]
 ```
 
+
 ## myZSS:load(...)
-## myZSS:eval(str)
-## myZSS:parse_selector(selector_str, from_data)
-##(r1, r2)
-## myZSS:match(el)
-## ZSS.matches(selector, el)
 
+Add CSS rules to the stylesheet, loaded from one or more files specified by file name.
 
-# Descriptor Tables versus Strings
-
-As seen in the example above, you can describe an 'element' to find declarations for using either a table or a string. The two are equivalent in terms of _functionality_:
+### Example:
 
 ```lua
-sheet:match{ type='line', id='forecast', tags={tag1=1,tag2=1}, data={ clouds=85 } }
-sheet:match'line#forecast.tag1.tag2[clouds=85]'
+local sheet = ZSS:new()
+sheet:load( 'a.css', 'b.css', 'c.css' )
 ```
 
-They differ in terms of performance and memory implications, however:
 
-* The table form is roughly 3–4× faster than the string form the _first_ time it is used. It causes a new table of computed declarations to be computed each time; this table is not retained by the library.
-* The string form is roughly 40× faster than the table form when the _exact_ same string has previously been seen. The string form causes the computed declarations table to be cached _forever_ in the library.
+## myZSS:match(element_descriptor)
 
-If you have elements with roughly the same tags or data value that you use repeatedly throughout the lifespan of your application, pass a string to `match()`.
+Use all rules in the stylesheet to compute the declarations that apply to described element.
 
-If you have elements whose tags or (notably) attribute values are constantly changing, and unlikely to be seen again, pass a table to `match()`.
+`element_descriptor` may be a selector-like string describing the element—e.g. `type.tag1.tag2`, `#someid[var1=42][var2=3.8]`—or a table using any/all/none of the keys: `{ type='mytype', id='myid', tags={tag1=1, tag2=1}, data={var1=42, var2=3.8}}`.
 
+See the section _[Descriptor Tables versus Strings](#descriptor-tables-versus-strings)_ above for a discussion on the implications of using strings versus tables.
+
+_Tip_: while tag, id, and attribute order doesn't matter for computing the declarations that apply, each unique string will recompute the applicable declarations instead of using the cache. For example, the following five strings all produce the same results, but require the table to be recomputed five times instead of cached:
+
+```lua
+local d1 = sheet:match'foo#bar.jim.jam[a=7]'
+local d2 = sheet:match'foo#bar.jam.jim[a=7]'
+local d3 = sheet:match'foo.jim#bar.jam[a=7]'
+local d4 = sheet:match'foo[a=7]#bar.jim.jam'
+local d5 = sheet:match'foo[a=7].jim.jam#bar'
+```
+
+Consequently, it is advisable to establish a convention when crafting your strings. The author of ZSS recommends `type#id.t1.t2[a1=1][a2=2]`, where tags and attributes are ordered alphabetically.
+
+### Example:
+
+```lua
+local sheet = ZSS:new():add[[
+  * { fill:none; stroke:white; opacity:1.0 }
+  text { fill:white; stroke:none }
+  .important { weight:bold; fill:red }
+  .debug     { opacity:0.5 }
+]]
+local m1 = sheet:match('text.important')
+--> { fill='red', opacity=1.0, stroke='none', weight='bold' }
+
+local m2 = sheet:match{ type='line', tags={debug=1} }
+--> { fill='none', opacity=1.0, stroke='white' }
+```
 
 
 # License & Contact
