@@ -6,8 +6,10 @@ It is generic:
 
 * There is no assumption about the set of element types (names), ids, classes, or attributes allowed.
 * There is no enforcement about the set of legal declaration names or values.
-* It supports user-specified mappings to convert value keywords to Lua values. For example, you can make `{ fill:none }` in CSS turn into `{fill=false}` in Lua.
-* It supports user-specified mappings to convert function calls to Lua values. For example, you make make `{ fill:hsv(137°, 0.5, 2.7) }` in CSS turn into `fill = {r=0, g=2.7, b=0.765}` in Lua.
+* It supports user-specified mappings to convert value keywords to Lua values.  
+  For example, you can make `{ fill:none }` in CSS turn into `{fill=false}` in Lua.
+* It supports user-specified mappings to convert function calls to Lua values.  
+  For example, you can make `{ fill:hsv(137°, 0.5, 2.7) }` in CSS turn into `fill = {r=0, g=2.7, b=0.765}` in Lua.
 
 It has a few simplifications/limitations:
 
@@ -59,26 +61,23 @@ sheet:load('my.css')
 --> text.negative { color:red }
 --> *[speed>20] { effect:flash(0.5, 3) }
 
-local p = require'pprint'
-p.setup{ use_tostring=true }
-
-p( sheet:match{ type=line } )
+sheet:match{ type=line }
 --> { fill=false, size=20, stroke=<color 'white'> }
 
-p( sheet:match'line'       )
+sheet:match'line'
 --> { fill=false, size=20, stroke=<color 'white'> }
 
-p( sheet:match'text' )
+sheet:match'text'
 --> { fill=<color 'white'>, font='main', size=20, stroke=false }
 
-p( sheet:match'text.important' )
+sheet:match'text.important'
 --> { fill=<color r=1.0 g=1.0 b=0.0 a=1.0>, font='main', size=20, stroke=false }
 
-p( sheet:match'#title.danger.important' )
+sheet:match'#title.danger.important'
 --> { fill=<color r=2.0 g=0.0 b=0.0 a=1.0>, font='bold', opacity=1, size=20,
 -->   stroke=<color 'white'> }
 
-p( sheet:match{ type=text, tags={debug=1}, data={speed=37} } )
+sheet:match{ type=text, tags={debug=1}, data={speed=37} }
 --> { effect={ func='flash', params={ 0.5, 3 }  },
 -->   fill=<color 'white'>, opacity=0.2, size=20, stroke=<color 'white'> }
 ```
