@@ -3,9 +3,9 @@ ZSS.__index = ZSS
 
 -- ZSS:new{
 --   handlers = {color=processColor, url=processURL },
---   values    = {none=false, ['true']=true, ['false']=false, transparent=processColor(0,0,0,0) },
---   basecss   = [[...css code...]],
---   files     = {'a.css', 'b.css'},
+--   values   = {none=false, ['true']=true, ['false']=false, transparent=processColor(0,0,0,0) },
+--   basecss  = [[...css code...]],
+--   files    = {'a.css', 'b.css'},
 -- }
 function ZSS:new(opts)
 	local zss = {
@@ -16,10 +16,12 @@ function ZSS:new(opts)
 		_values   = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
 	}
 	setmetatable(zss,ZSS)
-	if opts.handlers then zss:handlers(opts.handlers)        end
-	if opts.values   then zss:values(opts.values)            end
-	if opts.basecss  then zss:add(opts.basecss)              end
-	if opts.files    then zss:load(table.unpack(opts.files)) end
+	if opts then
+		if opts.handlers then zss:handlers(opts.handlers)        end
+		if opts.values   then zss:values(opts.values)            end
+		if opts.basecss  then zss:add(opts.basecss)              end
+		if opts.files    then zss:load(table.unpack(opts.files)) end
+	end
 	return zss
 end
 
