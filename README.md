@@ -181,13 +181,17 @@ end
 local sheet = ZSS:new()
 sheet:values{ white={1,1,1}, red={1,0,0} }
 sheet:handlers{ blend=lerpColors }
-sheet:add('.step1 { fill:blend(red, white, 0.2) } ')
+sheet:add'.step1 { fill:blend(red, white, 0.2) }'
+sheet:add'.step2 { fill:blurn(red) }'
 sheet:match{ tags={step1=1} }
 --> { fill={ 1.0, 0.2, 0.2 } }
+sheet:match'.step2'
+--> { fill={ func='blurn', params={ {1,0,0} } } }
 ```
 
-As seen above, values of parameters are resolved (using `values` and `handlers`) prior to passing them to the function.
+As seen above, values of parameters (`red` and `white` inside the `blend()` function) are resolved before to passing them to handlers.
 
+If a function is encountered that has no matching handler, a parsed table with the function name and parameter values is supplied as the value.
 
 ## myZSS:add(css)
 
@@ -230,7 +234,7 @@ Use all rules in the stylesheet to compute the declarations that apply to descri
 
 See the section _[Descriptor Tables versus Strings](#descriptor-tables-versus-strings)_ above for a discussion on the implications of using strings versus tables.
 
-_Tip_: while tag, id, and attribute order doesn't matter for computing the declarations that apply, each unique string will recompute the applicable declarations instead of using the cache. For example, the following five strings all produce the same results, but require the table to be recomputed five times instead of cached:
+_Tip_: while tag, id, and data order doesn't matter for computing the declarations that apply, each unique string will recompute the applicable declarations instead of using the cache. For example, the following five strings all produce the same results, but require the table to be recomputed five times instead of cached:
 
 ```lua
 local d1 = sheet:match'foo#bar.jim.jam[a=7]'
@@ -240,7 +244,7 @@ local d4 = sheet:match'foo[a=7]#bar.jim.jam'
 local d5 = sheet:match'foo[a=7].jim.jam#bar'
 ```
 
-Consequently, it is advisable to establish a convention when crafting your strings. The author of ZSS recommends `type#id.t1.t2[a1=1][a2=2]`, where tags and attributes are ordered alphabetically.
+Consequently, it is advisable to establish a convention when crafting your strings. The author of ZSS recommends type/id/tags/data, where tags and data are ordered alphabetically. For example: `type#id.t1.t2[a1=1][a2=2]`.
 
 ### Example:
 
