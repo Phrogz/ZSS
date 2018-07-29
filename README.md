@@ -28,24 +28,24 @@ ZSS = require'zss'
 
 color = require'color'
 local function hsv(h,s,v)
-	return color{ h=h, s=s, v=v }
+  return color{ h=h, s=s, v=v }
 end
 local function rgb(r,g,b)
-	return color{ r=r, g=g, b=b }
+  return color{ r=r, g=g, b=b }
 end
 
 local values = { none=false, transparent=false, visible=true }
 setmetatable(values,{__index=color.predefined})
 
 local sheet = ZSS:new{
-	values   = values,
-	handlers = { rgb=rgb, hsv=hsv },
-	basecss  = [[
-		@font-face { font-family:main; src:'Arial.ttf' }
-		@font-face { font-family:bold; src:'Arial-Bold.ttf' }
-		* { fill:none; stroke:white; size:20 }
-		text { font:main; fill:white; stroke:none }
-	]]
+  values   = values,
+  handlers = { rgb=rgb, hsv=hsv },
+  basecss  = [[
+    @font-face { font-family:main; src:'Arial.ttf' }
+    @font-face { font-family:bold; src:'Arial-Bold.ttf' }
+    * { fill:none; stroke:white; size:20 }
+    text { font:main; fill:white; stroke:none }
+  ]]
  }
 
 sheet:load('my.css')
@@ -82,6 +82,113 @@ sheet:match{ type=text, tags={debug=1}, data={speed=37} }
 -->   fill=<color 'white'>, opacity=0.2, size=20, stroke=<color 'white'> }
 ```
 
+
+# API
+
+## ZSS:new(opts)
+
+`opts` is a table with any of the following string keys (all optional):
+
+* `values` — a table mapping string literals (that might appear as values in declarations) to the Lua value you would like them to have instead.
+* `handlers` — a table mapping string function names (that might appear as values in declarations) to a function that will process the argument(s) and return a Lua value to use.
+* `basecss` — a string of CSS rules to initially parse for the stylesheet.
+* `files` — an array of string file names to load and parse after the `basecss`.
+
+Example:
+
+```lua
+ZSS = require'zss'
+local sheet = ZSS:new{
+  values   = {none=false, ['true']=true, ['false']=false, transparent=processColor(0,0,0,0) },
+  handlers = {color=processColor, url=processURL },
+  basecss  = [[...css code...]],
+  files    = {'a.css', 'b.css'},
+}
+```
+
+Values can be set (replaced) later using the `values()` method.  
+Handlers can be set (added to) later using the `handlers()` method.  
+You can parse additional raw CSS at any time using the `add()` method.  
+You can load CSS files by name at any time using the `load()` method.
+
+
+## myZSS:values(value_map)
+
+Set (replace) the literal value mapping used when parsing declaration values.
+
+`value_map` is a table mapping string literals (that might appear as values in declarations) to the Lua value you would like them to have instead.
+
+The return value is the invoking ZSS stylesheet instance (for method chaining).
+
+**Note**: values are resolved when a stylesheet is first loaded and parsed. Invoking this method after CSS has been loaded for a stylesheet will only affect future parsing of element descriptors.
+
+### Example:
+
+```lua
+local sheet = ZSS:new()
+sheet:values{ none=false, white={1,1,1}, red={1,0,0} }
+sheet:add('* {a:none; b:white; c:red; d:orange } ')
+sheet:match 'x'
+--> { a=false, b={1,1,1}, c={1,0,0}, d='orange' }
+```
+
+
+## myZSS:handlers(handler_map)
+
+Add additional function mappings to the stylesheet. When a function matching a name in the map is encountered, it will be passed the values specified in the declaration, and the return value of the function used as the value of the rule.
+
+`handler_map` is a table mapping string function names (that might appear as values in declarations) to the Lua function to invoke.
+
+The return value is the invoking ZSS stylesheet instance (for method chaining).
+
+**Note**: values are resolved when a stylesheet is first loaded and parsed. Invoking this method after CSS has been loaded for a stylesheet will only affect any additional CSS that is loaded.
+
+### Example:
+
+```lua
+function lerpColors(c1, c2, pct)
+  local result={}
+  for i=1,3 do result[i] = c1[i]+(c2[i]-c1[i])*pct end
+  return result
+end
+
+local sheet = ZSS:new()
+sheet:values{ white={1,1,1}, red={1,0,0} }
+sheet:handlers{ blend=lerpColors }
+sheet:add('.step1 { fill:blend(red, white, 0.2) } ')
+sheet:match{ tags={step1=1} }
+--> { fill={ 1.0, 0.2, 0.2 } }
+```
+
+As seen above, values of parameters are resolved (using `values` and `handlers`) prior to passing them to the function.
+
+
+## myZSS:add(css)
+
+Add CSS rules to the sheet (specified as a string of CSS).
+
+**Notes**:
+
+* You should invoke this method only after setting up any `values` and `handlers` mappings for the sheet.
+* Invoking this method resets the computed rules cache (as new rules may invalidate cached computations).
+
+### Example:
+
+```lua
+local sheet = ZSS:new()
+sheet:add[[
+  /* CSS comments are recognized and ignored */
+  @some-rule { note:'at rules are supported' }
+  #special   { x:1; y:2.0; z:'three'; q:sum(1,2,1) }
+]]
+```
+
+## myZSS:load(...)
+## myZSS:eval(str)
+## myZSS:parse_selector(selector_str, from_data)
+##(r1, r2)
+## myZSS:match(el)
+## ZSS.matches(selector, el)
 
 
 # Descriptor Tables versus Strings
