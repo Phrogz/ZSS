@@ -19,9 +19,7 @@ It has a few simplifications/limitations:
 * It does not (currently) provide access to the element/attributes when resolving functions. (This allows all functions known to be run once at parse time, with the resulting value cached.)
 * Due to a simple parser, you must not have a `{` character inside a selector, or a `}` character inside a rule.
 
-
-
-# Example Usage
+## Example Usage
 
 ```lua
 ZSS = require'zss'
@@ -109,6 +107,9 @@ If you have elements whose tags or (notably) attribute values are constantly cha
 * [`myZSS:add()`](#myzssaddcss) — parse CSS from string
 * [`myZSS:load()`](#myzssload) — load CSS from file
 * [`myZSS:match()`](#myzssmatchelement_descriptor) — compute the declarations that apply to an element
+* [`myZSS:clone()`](#myzssclone) — create a new sheet that derives from this one
+* [`myZSS:disable()`](#myzssdisablesheetid) — stop using rules from a particular set of CSS
+* [`myZSS:enable()`](#myzssenablesheetid) — resume using rules from a particular set of CSS
 
 
 ## ZSS:new(opts)
@@ -261,6 +262,58 @@ local m1 = sheet:match('text.important')
 local m2 = sheet:match{ type='line', tags={debug=1} }
 --> { fill='none', opacity=1.0, stroke='white' }
 ```
+
+
+## myZSS:clone()
+
+Creates a new ZSS sheet that derives from this sheet, while retaining a live link to its state. Rules in the 'parent' sheet supercede rules in the new sheet (for the same rank).
+
+### Example:
+
+```lua
+local main = ZSS:new{ files={'base.css', 'day.css'} }
+local doc1 = main:clone():load('doc1.css') -- doc1:match() uses base.css, day.css, and doc1.css
+local doc2 = main:clone():load('doc2.css') -- doc2:match() uses base.css, day.css, and doc1.css
+main:disable('day.css')
+main:load('night.css')
+--> now doc1:match() uses base.css, **night.css**, and doc1.css
+```
+
+## myZSS:disable( sheetid )
+
+Prevent a specific set of CSS from being used in the sheet (and all descendants created via `clone()`). For files, the `sheetid` is the path passed to `load()`; for CSS strings added via the `add()` method, the `sheetid` is the second string returned from `add()`.
+
+### Example:
+
+```lua
+local main  = ZSS:new{ files={'base.css', 'day.css'} }
+local doc1  = main:clone():load('doc1a.css')
+local _,bid = doc1:add('#additional { rules:here }')
+
+doc1:match() --> uses base.css, day.css, doc1a.css, and additional rules loaded during add()
+
+doc1:disable(bid)
+doc1:match() --> uses base.css, day.css, doc1a.css
+
+main:disable('day.css')
+doc1:match() --> uses base.css and doc1a.css
+main:match() --> uses base.css only
+
+main:enable('day.css')
+doc1:match() --> uses base.css, day.css, and doc1a.css
+main:match() --> uses base.css and day.css
+
+doc1:disable('day.css')
+doc1:match() --> uses base.css and doc1a.css
+main:match() --> uses base.css and day.css
+```
+
+**Note**: As shown in that last lines of the example above, a cloned sheet may disable rules loaded in its parent, but that does not disable them for the parent (or other clones of the parent).
+
+## myZSS:enable( sheetid )
+
+Re-enable CSS previously disabled with `disable()`. (See `disable()` for an example.)
+
 
 
 # License & Contact

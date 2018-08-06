@@ -1,6 +1,8 @@
 local ZSS = {}
 ZSS.__index = ZSS
 
+local updaterules
+
 -- ZSS:new{
 --   handlers = {color=processColor, url=processURL },
 --   values   = {none=false, ['true']=true, ['false']=false, transparent=processColor(0,0,0,0) },
@@ -9,11 +11,15 @@ ZSS.__index = ZSS
 -- }
 function ZSS:new(opts)
 	local zss = {
-		rules     = {}, -- array of rule tables, sorted by rank (specificity)
 		atrules   = {}, -- array of @font-face et. al, in document order
+		_rules    = {}, -- map of doc ids to array of rule tables, each sorted by document order
+		_active   = {}, -- array of rule tables for active documents, sorted by specificity (rank)
+		_docs     = {}, -- array of document names, with each name mapped its active state
 		_computed = {}, -- cached element signatures mapped to computed declarations
 		_handlers = {}, -- function names (e.g. "url") mapped to function to process arguments into value
 		_values   = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
+		_kids     = setmetatable({},{__mode='k'}), -- set of child tables mapped to true
+		_parent   = nil, -- reference to the sheet that spawned this one
 	}
 	setmetatable(zss,ZSS)
 	if opts then
@@ -22,6 +28,7 @@ function ZSS:new(opts)
 		if opts.basecss  then zss:add(opts.basecss)              end
 		if opts.files    then zss:load(table.unpack(opts.files)) end
 	end
+	updaterules(zss)
 	return zss
 end
 
@@ -30,7 +37,7 @@ function ZSS:load(...)
 	for _,filename in ipairs{...} do
 		local file = io.open(filename)
 		if file then
-			self:add(file:read('*all'))
+			self:add(file:read('*all'), filename)
 			file:close()
 		else
 			error("Could not load CSS file '"..file.."'.")
@@ -121,7 +128,14 @@ function ZSS:parse_selector(selector_str, from_data)
 end
 
 -- Add a block of raw CSS rules (as a single string) to the style sheet
-function ZSS:add(css)
+-- Returns the sheet itself (for chaining) and id associated with the css (for later enable/disable)
+function ZSS:add(css, sheetid)
+	sheetid = sheetid or 'loaded css #'..(self._parent and #self._parent._docs or 0) + #self._docs + 1
+	table.insert(self._docs, sheetid)
+	self._docs[sheetid] = true
+	local docrules = {}
+	self._rules[sheetid] = docrules
+
 	for rule_str in css:gsub('/%*.-%*/',''):gmatch('[^%s].-}') do
 		-- Convert declarations into a table mapping property to value
 		local decl_str = rule_str:match('{%s*(.-)%s*}')
@@ -142,25 +156,18 @@ function ZSS:add(css)
 					selector.id and 1 or 0,
 					#selector.tags + #selector.data,
 					selector.type and 1 or 0,
-					#self.rules
+					0 -- the document order will be determined during updaterules()
 				}
-				table.insert(self.rules, {selector=selector, declarations=declarations})
+				local rule = {selector=selector, declarations=declarations, doc=sheetid}
+				table.insert(docrules, rule)
 			end
 		end
 	end
-	self._computed = {}
 
-	-- sort the rules by rank
-	table.sort(self.rules, function(r1, r2)
-		r1,r2 = r1.selector.rank,r2.selector.rank
-		if     r1[1]<r2[1] then return true elseif r1[1]>r2[1] then return false
-		elseif r1[2]<r2[2] then return true elseif r1[2]>r2[2] then return false
-		elseif r1[3]<r2[3] then return true elseif r1[3]>r2[3] then return false
-		elseif r1[4]<r2[4] then return true else                    return false
-		end
-	end)
+	-- sort rules and determine active based on rank
+	updaterules(self)
 
-	return self
+	return self, sheetid
 end
 
 -- Given an element descriptor string or table, compute the declarations that apply. For example:
@@ -184,8 +191,9 @@ function ZSS:match(el)
 		end
 	end
 
+
 	local computed = {}
-	for _,rule in ipairs(self.rules) do
+	for _,rule in ipairs(self._active) do
 		if ZSS.matches(rule.selector, el) then
 			for k,v in pairs(rule.declarations) do
 				computed[k] = v
@@ -220,6 +228,70 @@ function ZSS.matches(selector, el)
 		end
 	end
 	return true
+end
+
+function ZSS:clone()
+	local kid = ZSS:new()
+	kid._parent = self
+	self._kids[kid] = true
+	return kid
+end
+
+function ZSS:disable(sheetid)
+	-- TODO: check if I, or any of my ancestors, have this sheet before disabling it
+	self._docs[sheetid] = false
+	updaterules(self)
+end
+
+function ZSS:enable(sheetid)
+	if self._rules[sheetid] then 
+		self._docs[sheetid] = true
+	else
+		-- wipe out any override that might have been disabling an ancestor
+		self._docs[sheetid] = nil
+	end
+	updaterules(self)
+end
+
+updaterules = function(self)
+	-- reset the computed and active rule list
+	self._computed = {}
+	self._active = {}
+
+	-- assume that the parent's active is already up-to-date
+	if self._parent then
+		for i,rule in ipairs(self._parent._active) do
+			-- do not use parent's active if we overrode it
+			if self._docs[rule.doc]~=false then
+				table.insert(self._active, rule)
+			end
+		end
+	end
+
+	-- add all the rules from the active documents
+	for _,sheetid in ipairs(self._docs) do
+		if self._docs[sheetid] then
+			for _,rule in ipairs(self._rules[sheetid]) do
+				table.insert(self._active, rule)
+				rule.selector.rank[4] = #self._active
+			end
+		end
+	end
+
+	-- sort the active rules by rank
+	table.sort(self._active, function(r1, r2)
+		r1,r2 = r1.selector.rank,r2.selector.rank
+		if     r1[1]<r2[1] then return true elseif r1[1]>r2[1] then return false
+		elseif r1[2]<r2[2] then return true elseif r1[2]>r2[2] then return false
+		elseif r1[3]<r2[3] then return true elseif r1[3]>r2[3] then return false
+		elseif r1[4]<r2[4] then return true else                    return false
+		end
+	end)
+
+	-- ensure that any cloned children are updated
+	for kid,_ in pairs(self._kids) do
+		updaterules(kid)
+	end
 end
 
 return ZSS
