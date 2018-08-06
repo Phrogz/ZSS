@@ -279,7 +279,7 @@ main:load('night.css')
 --> now doc1:match() uses base.css, **night.css**, and doc1.css
 ```
 
-## myZSS:disable( sheetid )
+## myZSS:disable(sheetid)
 
 Prevent a specific set of CSS from being used in the sheet (and all descendants created via `clone()`). For files, the `sheetid` is the path passed to `load()`; for CSS strings added via the `add()` method, the `sheetid` is the second string returned from `add()`.
 
@@ -310,7 +310,7 @@ main:match() --> uses base.css and day.css
 
 **Note**: As shown in that last lines of the example above, a cloned sheet may disable rules loaded in its parent, but that does not disable them for the parent (or other clones of the parent).
 
-## myZSS:enable( sheetid )
+## myZSS:enable(sheetid)
 
 Re-enable CSS previously disabled with `disable()`. (See `disable()` for an example.)
 
