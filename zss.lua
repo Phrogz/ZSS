@@ -1,3 +1,10 @@
+--[=========================================================================[
+   ZSS v0.2
+   See http://github.com/Phrogz/ZSS for usage documentation.
+   Licensed under MIT License.
+   See https://opensource.org/licenses/MIT for details.
+--]=========================================================================]
+
 local ZSS = { VERSION="0.2" }
 ZSS.__index = ZSS
 

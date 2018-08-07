@@ -318,6 +318,6 @@ Re-enable CSS previously disabled with `disable()`. (See `disable()` for an exam
 
 # License & Contact
 
-ZSS is copyright ©2018 by Gavin Kistner and is licensed under the [MIT License](http://www.opensource.org/licenses/mit-license.php). See the LICENSE.txt file for more details.
+ZSS is copyright ©2018 by Gavin Kistner and is licensed under the [MIT License](https://opensource.org/licenses/MIT). See the LICENSE.txt file for more details.
 
 For bugs or feature requests please [open issues on GitHub](https://github.com/Phrogz/ZSS/issues). For other communication you can [email the author directly](mailto:!@phrogz.net?subject=ZSS).
