@@ -21,7 +21,7 @@ function test.load_two_sheets()
 	assertTableEmpty(sheet:match('z'))
 end
 
-function test.inherit_a_sheet()
+function test.extend_a_sheet()
 	local sheet1, id1 = zss:new():add('a {a:1} b {b:1}')
 	local sheet2, id2 = sheet1:extend():add('a {a:2}')
 	assert(id2, 'sheet:add() must return an id')
@@ -30,6 +30,9 @@ function test.inherit_a_sheet()
 	assertEqual(sheet1:match('b').b, 1)
 	assertEqual(sheet2:match('a').a, 2)
 	assertEqual(sheet2:match('b').b, 1, 'extended sheets must inherit from their parent')
+
+	local sheet3 = sheet1:extend('test1.css')
+	assertEqual(sheet3:match('.danger').size, 18, 'should be able to pass filenames to load to extend')
 end
 
 function test.disable_own_sheet()

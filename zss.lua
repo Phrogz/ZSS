@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.2
+   ZSS v0.3
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.2" }
+local ZSS = { VERSION="0.3" }
 ZSS.__index = ZSS
 
 local updaterules
@@ -41,15 +41,18 @@ end
 
 -- Usage: myZSS:load( 'file1.css', 'file2.css', ... )
 function ZSS:load(...)
+	self._deferupdate = true
 	for _,filename in ipairs{...} do
 		local file = io.open(filename)
 		if file then
 			self:add(file:read('*all'), filename)
 			file:close()
 		else
-			error("Could not load CSS file '"..file.."'.")
+			error("Could not load CSS file '"..filename.."'.")
 		end
 	end
+	updaterules(self)
+	self._deferupdate = false
 	return self
 end
 
@@ -172,7 +175,7 @@ function ZSS:add(css, sheetid)
 	end
 
 	-- sort rules and determine active based on rank
-	updaterules(self)
+	if not self._deferupdate then updaterules(self) end
 
 	return self, sheetid
 end
@@ -237,10 +240,11 @@ function ZSS.matches(selector, el)
 	return true
 end
 
-function ZSS:extend()
+function ZSS:extend(...)
 	local kid = ZSS:new()
 	kid._parent = self
 	self._kids[kid] = true
+	kid:load(...)
 	return kid
 end
 
@@ -251,7 +255,7 @@ function ZSS:disable(sheetid)
 end
 
 function ZSS:enable(sheetid)
-	if self._rules[sheetid] then 
+	if self._rules[sheetid] then
 		self._docs[sheetid] = true
 	else
 		-- wipe out any override that might have been disabling an ancestor

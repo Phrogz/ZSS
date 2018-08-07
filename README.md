@@ -107,7 +107,7 @@ If you have elements whose tags or (notably) attribute values are constantly cha
 * [`myZSS:add()`](#myzssaddcss) — parse CSS from string
 * [`myZSS:load()`](#myzssload) — load CSS from file
 * [`myZSS:match()`](#myzssmatchelement_descriptor) — compute the declarations that apply to an element
-* [`myZSS:clone()`](#myzssclone) — create a new sheet that derives from this one
+* [`myZSS:extend()`](#myzssextend) — create a new sheet that derives from this one
 * [`myZSS:disable()`](#myzssdisablesheetid) — stop using rules from a particular set of CSS
 * [`myZSS:enable()`](#myzssenablesheetid) — resume using rules from a particular set of CSS
 
@@ -264,16 +264,16 @@ local m2 = sheet:match{ type='line', tags={debug=1} }
 ```
 
 
-## myZSS:clone()
+## myZSS:extend(...)
 
-Creates a new ZSS sheet that derives from this sheet, while retaining a live link to its state. Rules in the 'parent' sheet supercede rules in the new sheet (for the same rank).
+Creates a new ZSS sheet that derives from this sheet, while retaining a live link to its state. Rules in the 'parent' sheet supercede rules in the new sheet (for the same rank). If you pass any filenames, they will be passed to `load()`. (In other words, `local b = a:extend('a.css', 'b.css')` is a shorthand for `local b = a:extend():load('a.css', 'b.css')`.)
 
 ### Example:
 
 ```lua
 local main = ZSS:new{ files={'base.css', 'day.css'} }
-local doc1 = main:clone():load('doc1.css') -- doc1:match() uses base.css, day.css, and doc1.css
-local doc2 = main:clone():load('doc2.css') -- doc2:match() uses base.css, day.css, and doc1.css
+local doc1 = main:extend():load('doc1.css') -- doc1:match() uses base.css, day.css, and doc1.css
+local doc2 = main:extend('doc2.css')        -- doc2:match() uses base.css, day.css, and doc2.css
 main:disable('day.css')
 main:load('night.css')
 --> now doc1:match() uses base.css, **night.css**, and doc1.css
