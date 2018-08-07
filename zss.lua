@@ -1,4 +1,4 @@
-local ZSS = {}
+local ZSS = { VERSION="0.2" }
 ZSS.__index = ZSS
 
 local updaterules
@@ -230,7 +230,7 @@ function ZSS.matches(selector, el)
 	return true
 end
 
-function ZSS:clone()
+function ZSS:extend()
 	local kid = ZSS:new()
 	kid._parent = self
 	self._kids[kid] = true
@@ -288,7 +288,7 @@ updaterules = function(self)
 		end
 	end)
 
-	-- ensure that any cloned children are updated
+	-- ensure that any extended children are updated
 	for kid,_ in pairs(self._kids) do
 		updaterules(kid)
 	end

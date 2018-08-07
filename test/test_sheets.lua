@@ -23,13 +23,13 @@ end
 
 function test.inherit_a_sheet()
 	local sheet1, id1 = zss:new():add('a {a:1} b {b:1}')
-	local sheet2, id2 = sheet1:clone():add('a {a:2}')
+	local sheet2, id2 = sheet1:extend():add('a {a:2}')
 	assert(id2, 'sheet:add() must return an id')
 	assertNotEqual(id1, id2, 'sheet:add() must return unique ids')
 	assertEqual(sheet1:match('a').a, 1)
 	assertEqual(sheet1:match('b').b, 1)
 	assertEqual(sheet2:match('a').a, 2)
-	assertEqual(sheet2:match('b').b, 1, 'cloned sheets must inherit from their parent')
+	assertEqual(sheet2:match('b').b, 1, 'extended sheets must inherit from their parent')
 end
 
 function test.disable_own_sheet()
@@ -45,7 +45,7 @@ end
 
 function test.disable_in_parent()
 	local sheet1, id1 = zss:new():add('a {a:1} b {b:1}')
-	local sheet2, id2 = sheet1:clone():add('a {a:2}')
+	local sheet2, id2 = sheet1:extend():add('a {a:2}')
 	assertEqual(sheet2:match('a').a, 2)
 	assertEqual(sheet2:match('b').b, 1, '')
 	sheet1:disable(id1)
@@ -55,9 +55,9 @@ function test.disable_in_parent()
 	assertEqual(sheet2:match('b').b, 1)
 end
 
-function test.disable_ancstor_sheet_in_self()
+function test.disable_ancestor_sheet_in_self()
 	local sheet1, id1 = zss:new():add('a {a:1} b {b:1}')
-	local sheet2, id2 = sheet1:clone():add('a {a:2}')
+	local sheet2, id2 = sheet1:extend():add('a {a:2}')
 	assertEqual(sheet2:match('a').a, 2)
 	assertEqual(sheet2:match('b').b, 1)
 	sheet2:disable(id1)
@@ -69,4 +69,24 @@ function test.disable_ancstor_sheet_in_self()
 	assertEqual(sheet2:match('b').b, 1)
 end
 
-test{useANSI=false}
+local function countkeys(t)
+	local i=0
+	for _,_ in pairs(t) do i=i+1 end
+	return i
+end
+
+-- This is a bit of an implementation test, relying on nominally internal data structures
+function test.test_caching()
+	local sheet = zss:new{files={'test1.css'}}
+	assertTableEmpty(sheet._computed)
+	for i=1,10 do sheet:match(string.format('pedestrian[ttc=%.1f]', i/10)) end
+	assertEqual(countkeys(sheet._computed), 10, 'unique strings should result in unique cached computes')
+
+	for i=1,10 do sheet:match(string.format('pedestrian[ttc=%.1f]', i/10)) end
+	assertEqual(countkeys(sheet._computed), 10, 'repeated strings must not grow the cache')
+
+	for i=1,100 do sheet:match({type='pedestrian', data={ttc=i}}) end
+	assertEqual(countkeys(sheet._computed), 10, 'table-based queries must not grow the cache')
+end
+
+test()
