@@ -35,6 +35,39 @@ function test.extend_a_sheet()
 	assertEqual(sheet3:match('.danger').size, 18, 'should be able to pass filenames to load to extend')
 end
 
+function test.extensions_and_values()
+	local sheet1 = zss:new{values={a=1, b=2}, basecss='a {a:a} b {b:b} c {c:c}'}
+	local sheet2 = sheet1:extend():values{b=3, c=4}:add('j {a:a} k {b:b} l {c:c}')
+	assertEqual(sheet1:match('a').a, 1)
+	assertEqual(sheet1:match('b').b, 2)
+	assertEqual(sheet1:match('c').c, 'c')
+	assertEqual(sheet2:match('a').a, 1, 'extension sheets can still resolve old rules with old values')
+	assertEqual(sheet2:match('b').b, 2, 'new values in an extension sheet do not change values in already-loaded rules') -- is this really desirable?
+	assertEqual(sheet2:match('c').c, 'c', 'new values in an extension sheet do not change values in already-loaded rules') -- is this really desirable?
+	assertEqual(sheet2:match('j').a, 1, 'extension sheets must resolve using base values')
+	assertEqual(sheet2:match('k').b, 3, 'extension sheets use new values when loading new rules')
+	assertEqual(sheet2:match('l').c, 4)
+end
+
+function test.extensions_and_functions()
+	local f1,f2 = {},{}
+	function f1.a() return 1 end
+	function f1.b() return 2 end
+	function f2.b() return 3 end
+	function f2.c() return 4 end
+	local sheet1 = zss:new{handlers=f1, basecss='a {a:a()} b {b:b()} c {c:c()}'}
+	local sheet2 = sheet1:extend():handlers(f2):add('j {a:a()} k {b:b()} l {c:c()}')
+	assertEqual(sheet1:match('a').a, 1)
+	assertEqual(sheet1:match('b').b, 2)
+	assertTableEquals(sheet1:match('c').c, {func='c', params={}})
+	assertEqual(sheet2:match('a').a, 1)
+	assertEqual(sheet2:match('b').b, 2)
+	assertTableEquals(sheet2:match('c').c, {func='c', params={}}, 'extension sheets do not use new functions for old rules')
+	assertEqual(sheet2:match('j').a, 1, 'extension sheets must have access to handlers from the base')
+	assertEqual(sheet2:match('k').b, 3, 'extension sheets must use redefined handlers if they conflict')
+	assertEqual(sheet2:match('l').c, 4, 'extension sheets must have access to their own handlers')
+end
+
 function test.disable_own_sheet()
 	local sheet = zss:new()
 	local _, id1 = sheet:add'a {a:1}'

@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.3
+   ZSS v0.4
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.3" }
+local ZSS = { VERSION="0.4" }
 ZSS.__index = ZSS
 
 local updaterules
@@ -63,8 +63,8 @@ function ZSS:handlers(handlers)
 end
 
 -- Usage: myZSS:values{ none=false, false=false, transparent=Color(0,0,0,0) }
-function ZSS:values(valuemapping)
-	self._values = valuemapping
+function ZSS:values(valuemap)
+	for k,v in pairs(valuemap) do self._values[k]=v end
 	return self
 end
 
@@ -201,7 +201,6 @@ function ZSS:match(el)
 		end
 	end
 
-
 	local computed = {}
 	for _,rule in ipairs(self._active) do
 		if ZSS.matches(rule.selector, el) then
@@ -243,6 +242,8 @@ end
 function ZSS:extend(...)
 	local kid = ZSS:new()
 	kid._parent = self
+	setmetatable(kid._values,  {__index=self._values  })
+	setmetatable(kid._handlers,{__index=self._handlers})
 	self._kids[kid] = true
 	kid:load(...)
 	return kid

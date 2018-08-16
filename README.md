@@ -141,13 +141,13 @@ You can load CSS files by name at any time using the `load()` method.
 
 ## myZSS:values(value_map)
 
-Set (replace) the literal value mapping used when parsing declaration values.
+Add to the literal value mappings used when parsing declaration values.
 
 `value_map` is a table mapping string literals (that might appear as values in declarations) to the Lua value you would like them to have instead.
 
 The return value is the invoking ZSS stylesheet instance (for method chaining).
 
-**Note**: values are resolved when a stylesheet is first loaded and parsed. Invoking this method after CSS has been loaded for a stylesheet will only affect future parsing of element descriptors.
+**Note**: values are resolved when rules are added/loaded. Invoking this method after CSS has been loaded will only affect rules added/loaded after this calls.
 
 ### Example:
 
