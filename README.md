@@ -22,29 +22,23 @@ It has a few simplifications/limitations:
 ## Example Usage
 
 ```lua
-ZSS = require'zss'
-
+ZSS   = require'zss'
 color = require'color'
-local function hsv(h,s,v)
-  return color{ h=h, s=s, v=v }
-end
-local function rgb(r,g,b)
-  return color{ r=r, g=g, b=b }
-end
-
-local values = { none=false, transparent=false, visible=true }
-setmetatable(values,{__index=color.predefined})
 
 local sheet = ZSS:new{
-  values   = values,
-  handlers = { rgb=rgb, hsv=hsv },
+  constants = { none=false, transparent=false, visible=true },
+  functions = {
+    rgb=function(r,g,b) return color{ r=r, g=g, b=b } end,
+    hsv=function(h,s,v) return color{ h=h, s=s, v=v } end
+  },
   basecss  = [[
     @font-face { font-family:main; src:'Arial.ttf' }
     @font-face { font-family:bold; src:'Arial-Bold.ttf' }
     * { fill:none; stroke:white; size:20 }
     text { font:main; fill:white; stroke:none }
   ]]
- }
+}
+sheet:valueConstants(color.predefined)
 
 sheet:load('my.css')
 --> my.css has the contents
@@ -102,8 +96,8 @@ If you have elements whose tags or (notably) attribute values are constantly cha
 # API
 
 * [`ZSS:new()`](#zssnewopts) — create a sheet
-* [`myZSS:values()`](#myzssvaluesvalue_map) — set value replacements
-* [`myZSS:handlers()`](#myzsshandlershandler_map) — set function handlers
+* [`myZSS:constants()`](#myzssconstantsvalue_map) — set value replacements
+* [`myZSS:functions()`](#myzssfunctionshandler_map) — set function handlers
 * [`myZSS:add()`](#myzssaddcss) — parse CSS from string
 * [`myZSS:load()`](#myzssload) — load CSS from file
 * [`myZSS:match()`](#myzssmatchelement_descriptor) — compute the declarations that apply to an element
@@ -116,8 +110,8 @@ If you have elements whose tags or (notably) attribute values are constantly cha
 
 `opts` is a table with any of the following string keys (all optional):
 
-* `values` — a table mapping string literals (that might appear as values in declarations) to the Lua value you would like them to have instead.
-* `handlers` — a table mapping string function names (that might appear as values in declarations) to a function that will process the argument(s) and return a Lua value to use.
+* `constants` — a table mapping string literals (that might appear as values in declarations) to the Lua value you would like them to have instead.
+* `functions` — a table mapping string function names (that might appear as values in declarations) to a function that will process the argument(s) and return a Lua value to use.
 * `basecss` — a string of CSS rules to initially parse for the stylesheet.
 * `files` — an array of string file names to load and parse after the `basecss`.
 

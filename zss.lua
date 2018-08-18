@@ -1,39 +1,42 @@
 --[=========================================================================[
-   ZSS v0.4
+   ZSS v0.5
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.4" }
+local ZSS = { VERSION="0.5" }
 ZSS.__index = ZSS
 
 local updaterules
 
 -- ZSS:new{
---   handlers = {color=processColor, url=processURL },
---   values   = {none=false, ['true']=true, ['false']=false, transparent=processColor(0,0,0,0) },
---   basecss  = [[...css code...]],
---   files    = {'a.css', 'b.css'},
+--   functions  = {color=processColor, url=processURL },
+--   constants  = {none=false, ['true']=true, ['false']=false, transparent=processColor(0,0,0,0) },
+--   directives = { ['font-face']=processFontFaceRule },
+--   basecss    = [[...css code...]],
+--   files      = {'a.css', 'b.css'},
 -- }
 function ZSS:new(opts)
 	local zss = {
-		atrules   = {}, -- array of @font-face et. al, in document order
-		_rules    = {}, -- map of doc ids to array of rule tables, each sorted by document order
-		_active   = {}, -- array of rule tables for active documents, sorted by specificity (rank)
-		_docs     = {}, -- array of document names, with each name mapped its active state
-		_computed = {}, -- cached element signatures mapped to computed declarations
-		_handlers = {}, -- function names (e.g. "url") mapped to function to process arguments into value
-		_values   = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
-		_kids     = setmetatable({},{__mode='k'}), -- set of child tables mapped to true
-		_parent   = nil, -- reference to the sheet that spawned this one
+		functions  = {}, -- function names (e.g. "url") mapped to function to process arguments into value
+		constants  = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
+		directives = {}, -- map from name of at rule (without @) to function to invoke
+		atrules    = {}, -- array of @font-face et. al, in document order; also indexed by rule name to array of declarations
+		_rules     = {}, -- map of doc ids to array of rule tables, each sorted by document order
+		_active    = {}, -- array of rule tables for active documents, sorted by specificity (rank)
+		_docs      = {}, -- array of document names, with each name mapped its active state
+		_computed  = {}, -- cached element signatures mapped to computed declarations
+		_kids      = setmetatable({},{__mode='k'}), -- set of child tables mapped to true
+		_parent    = nil, -- reference to the sheet that spawned this one
 	}
 	setmetatable(zss,ZSS)
 	if opts then
-		if opts.handlers then zss:handlers(opts.handlers)        end
-		if opts.values   then zss:values(opts.values)            end
-		if opts.basecss  then zss:add(opts.basecss)              end
-		if opts.files    then zss:load(table.unpack(opts.files)) end
+		if opts.functions  then zss:valueFunctions(opts.functions)    end
+		if opts.constants  then zss:valueConstants(opts.constants)    end
+		if opts.basecss    then zss:add(opts.basecss)                 end
+		if opts.files      then zss:load(table.unpack(opts.files))    end
+		if opts.directives then zss:handleDirectives(opts.directives) end
 	end
 	updaterules(zss)
 	return zss
@@ -56,21 +59,26 @@ function ZSS:load(...)
 	return self
 end
 
--- Usage: myZSS:handlers{ color=processColor, url=processURL }
-function ZSS:handlers(handlers)
-	for k,f in pairs(handlers) do self._handlers[k]=f end
+-- Usage: myZSS:valueFunctions{ color=processColor, url=processURL }
+function ZSS:valueFunctions(handlermap)
+	for k,f in pairs(handlermap) do self.functions[k]=f end
 	return self
 end
 
--- Usage: myZSS:values{ none=false, false=false, transparent=Color(0,0,0,0) }
-function ZSS:values(valuemap)
-	for k,v in pairs(valuemap) do self._values[k]=v end
+-- Usage: myZSS:mapValues{ none=false, false=false, transparent=Color(0,0,0,0) }
+function ZSS:valueConstants(valuemap)
+	for k,v in pairs(valuemap) do self.constants[k]=v end
+	return self
+end
+
+function ZSS:handleDirectives(handlermap)
+	for k,v in pairs(handlermap) do self.directives[k]=v end
 	return self
 end
 
 -- Resolve values in declarations based on values and handlers
 function ZSS:eval(str)
-	local result = self._values[str]
+	local result = self.constants[str]
 	if result==nil then result = tonumber(str) end
 	if result==nil then
 		result = str:match('^"(.-)"$') or str:match("^'(.-)'$")
@@ -81,8 +89,8 @@ function ZSS:eval(str)
 				for param in params:gmatch('%s*([^,]+),?') do
 					table.insert(p,self:eval(param:gsub('%s+$','')))
 				end
-				if self._handlers[func] then
-					result = self._handlers[func](table.unpack(p))
+				if self.functions[func] then
+					result = self.functions[func](table.unpack(p))
 				else
 					result = { func=func, params=p }
 				end
@@ -161,6 +169,10 @@ function ZSS:add(css, sheetid)
 			if selector.directive then
 				selector.declarations = declarations
 				table.insert(self.atrules, selector)
+				self.atrules[selector.directive] = self.atrules[selector.directive] or {}
+				table.insert(self.atrules[selector.directive], declarations)
+				local handler = self.directives[string.sub(selector.directive,2)]
+				if handler then handler(self, declarations) end
 			else
 				selector.rank = {
 					selector.id and 1 or 0,
@@ -242,8 +254,9 @@ end
 function ZSS:extend(...)
 	local kid = ZSS:new()
 	kid._parent = self
-	setmetatable(kid._values,  {__index=self._values  })
-	setmetatable(kid._handlers,{__index=self._handlers})
+	setmetatable(kid.constants,{__index=self.constants})
+	setmetatable(kid.functions,{__index=self.functions})
+	setmetatable(kid.directives,{__index=self.directives})
 	self._kids[kid] = true
 	kid:load(...)
 	return kid

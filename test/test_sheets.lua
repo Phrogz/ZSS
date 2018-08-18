@@ -1,6 +1,6 @@
 package.path = '../?.lua;' .. package.path
-zss = require'../zss'
 
+zss = require'zss'
 _ENV = require('lunity')('ZSS Tests')
 
 function test.load_two_sheets()
@@ -36,8 +36,8 @@ function test.extend_a_sheet()
 end
 
 function test.extensions_and_values()
-	local sheet1 = zss:new{values={a=1, b=2}, basecss='a {a:a} b {b:b} c {c:c}'}
-	local sheet2 = sheet1:extend():values{b=3, c=4}:add('j {a:a} k {b:b} l {c:c}')
+	local sheet1 = zss:new{constants={a=1, b=2}, basecss='a {a:a} b {b:b} c {c:c}'}
+	local sheet2 = sheet1:extend():valueConstants{b=3, c=4}:add('j {a:a} k {b:b} l {c:c}')
 	assertEqual(sheet1:match('a').a, 1)
 	assertEqual(sheet1:match('b').b, 2)
 	assertEqual(sheet1:match('c').c, 'c')
@@ -55,8 +55,8 @@ function test.extensions_and_functions()
 	function f1.b() return 2 end
 	function f2.b() return 3 end
 	function f2.c() return 4 end
-	local sheet1 = zss:new{handlers=f1, basecss='a {a:a()} b {b:b()} c {c:c()}'}
-	local sheet2 = sheet1:extend():handlers(f2):add('j {a:a()} k {b:b()} l {c:c()}')
+	local sheet1 = zss:new{functions=f1, basecss='a {a:a()} b {b:b()} c {c:c()}'}
+	local sheet2 = sheet1:extend():valueFunctions(f2):add('j {a:a()} k {b:b()} l {c:c()}')
 	assertEqual(sheet1:match('a').a, 1)
 	assertEqual(sheet1:match('b').b, 2)
 	assertTableEquals(sheet1:match('c').c, {func='c', params={}})
@@ -103,6 +103,33 @@ function test.disable_ancestor_sheet_in_self()
 	assertNil(sheet2:match('b').b)
 	sheet2:enable(id1)
 	assertEqual(sheet2:match('b').b, 1)
+end
+
+function test.at_rules()
+	local sheet = zss:new():add[[
+		@foo-bar { a:1; b:2 }
+		@jim-jam { a:2; b:3 }
+		@foo-bar { a:4; b:5 }
+	]]
+	assertNotNil(sheet.atrules)
+	assertNotNil(sheet.atrules['@foo-bar'])
+	assertEqual(#sheet.atrules['@foo-bar'], 2)
+	assertEqual(sheet.atrules['@foo-bar'][1].a, 1)
+	assertEqual(sheet.atrules['@foo-bar'][2].a, 4)
+end
+
+function test.atrule_handler()
+	local sheet = zss:new()
+	sheet:handleDirectives{
+		brush = function(me, declarations)
+			assertEqual(me, sheet)
+			assertEqual(declarations.name,'foo')
+			assertEqual(declarations.src,'bar')
+			me.foundBrush = true
+		end
+	}
+	sheet:add '@brush { name:foo; src:bar }'
+	assert(sheet.foundBrush, 'handleDirectives must run when an at rule is seen')
 end
 
 local function countkeys(t)
