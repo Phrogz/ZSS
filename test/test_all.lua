@@ -183,36 +183,48 @@ function test.functions_with_placeholders()
 			echo = function(n) return n end
 		},
 		basecss = [[
-			x   { p:add(1,2) }
-			y   { p:add(@r,17) }
-			z   { p:add(25,@s) }
-			e   { p:echo(@foo) }
-			ct1 { p:ct1()   }
-			ct2 { p:ct2(@x) }
+			x   { p1:add(1,2) }
+			y   { p2:add(@r,17) }
+			z   { p3:add(25,@s) }
+			e   { p4:echo(@foo) }
+			ct1 { p5:ct1()   }
+			ct2 { p6:ct2(@x) }
 		]]
 	}
-	assertEqual(style:match('x').p, 3,  'simple functions work')
-	assertEqual(style:match('y').p, 17, 'placeholder functions "work" even without data passed')
-	assertEqual(style:match('z').p, 25, 'placeholder functions "work" even without data passed')
-	assertEqual(style:match('e').p, nil, 'placeholder functions receive no parameter if no data')
-	assertEqual(style:match('e[foo=42]').p, 42, 'placeholder functions receive data by name from attributes')
-	assertEqual(style:match({type='e', data={foo=42}}).p, 42, 'placeholder functions receive data by name')
-	assertEqual(style:match('y[r=25]').p, 42, 'values work through descriptor strings')
-	assertEqual(style:match({type='y', data={r=25}}).p, 42, 'values work through descriptor tables')
-	assertEqual(style:match('z[s=17]').p, 42, 'values work through descriptor strings')
-	assertEqual(style:match({type='z', data={s=17}}).p, 42, 'values work through descriptor tables')
-	assertEqual(style:match({type='y', data={r=4}}).p, 21, 'new values produce new results')
-	assertEqual(style:match('y[r=4]').p, 21, 'new values produce new results')
+	assertEqual(style:match('x').p1, 3,  'simple functions work')
+	assertEqual(style:match('y').p2, 17, 'placeholder functions "work" even without data passed')
+	assertEqual(style:match('z').p3, 25, 'placeholder functions "work" even without data passed')
+	assertEqual(style:match('e').p4, nil, 'placeholder functions receive no parameter if no data')
+	assertEqual(style:match('e[foo=42]').p4, 42, 'placeholder functions receive data by name from attributes')
+	assertEqual(style:match({type='e', data={foo=42}}).p4, 42, 'placeholder functions receive data by name')
+	assertEqual(style:match('y[r=25]').p2, 42, 'values work through descriptor strings')
+	assertEqual(style:match({type='y', data={r=25}}).p2, 42, 'values work through descriptor tables')
+	assertEqual(style:match('z[s=17]').p3, 42, 'values work through descriptor strings')
+	assertEqual(style:match({type='z', data={s=17}}).p3, 42, 'values work through descriptor tables')
+	assertEqual(style:match({type='y', data={r=4}}).p2, 21, 'new values produce new results')
+	assertEqual(style:match('y[r=4]').p2, 21, 'new values produce new results')
 
-	assertEqual(ct1,                  1, 'parsing the rules invokes non-placeholder functions')
-	assertEqual(style:match('ct1').p, 1, 'non-placholder functions do not get re-invoked')
-	assertEqual(ct1,                  1, 'non-placholder functions do not get re-invoked')
+	assertEqual(ct1,                   1, 'parsing the rules invokes non-placeholder functions')
+	assertEqual(style:match('ct1').p5, 1, 'non-placholder functions do not get re-invoked')
+	assertEqual(ct1,                   1, 'non-placholder functions do not get re-invoked')
 
-	assertEqual(ct2,                                     0, 'placholder functions do not get invoked during parsing')
-	assertEqual(style:match('ct2').p,                    1, 'placholder functions get invoked each time, regardless of data')
-	assertEqual(style:match('ct2[x=1]').p,               2, 'placholder functions get invoked each time, regardless of data')
-	assertEqual(style:match({type='ct2'}).p,             3, 'placholder functions get invoked each time, regardless of data')
-	assertEqual(style:match({type='ct2', data={x=2}}).p, 4, 'placholder functions get invoked each time, regardless of data')
+	assertEqual(ct2,                                      0, 'placholder functions do not get invoked during parsing')
+	assertEqual(style:match('ct2').p6,                    1, 'placholder functions get invoked each time, regardless of data')
+	assertEqual(style:match('ct2[x=1]').p6,               2, 'placholder functions get invoked each time, regardless of data')
+	assertEqual(style:match({type='ct2'}).p6,             3, 'placholder functions get invoked each time, regardless of data')
+	assertEqual(style:match({type='ct2', data={x=2}}).p6, 4, 'placholder functions get invoked each time, regardless of data')
+
+	local style = zss:new{
+		functions = { add=function(a,b) return a+b end },
+		basecss   = [[
+			a[x=17] { p1:add(25,@x) }
+			a[x=25] { p2:add(17,@x) }
+		]]
+	}
+	assertEqual(style:match('a[x=17]').p1, 42)
+	assertEqual(style:match('a[x=25]').p2, 42)
+	assertEqual(style:match('a[x=17]').p1, 42)
+	assertEqual(style:match('a[x=25]').p2, 42)
 end
 
 function test.functions_with_extensions()

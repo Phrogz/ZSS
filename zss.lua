@@ -83,7 +83,7 @@ end
 -- Parse and evaluate values in declarations
 function ZSS:eval(str)
 	if str:find('@') then
-		local f,err = load('return '..str:gsub('@','__item__.'), nil, 't', self._env)
+		local f,err = load('return '..str:gsub('@','_data_.'), nil, 't', self._env)
 		if not f then
 			print(err)
 		else
@@ -96,10 +96,10 @@ function ZSS:eval(str)
 			if ok then
 				return res
 			else
-				print('Error evaluating "'..str..'": '..res)
+				print('CSS error evaluating "'..str..'": '..res)
 			end
 		else
-			print('Error evaluating "'..str..'": '..err)
+			print('CSS error compiling "'..str..'": '..err)
 		end
 	end
 end
@@ -205,17 +205,18 @@ end
 -- Use an element descriptor will not use the cache (either for lookup or storing the result).
 -- Use element descriptors when you have data values that change.
 function ZSS:match(el)
-	local descriptor, computed, placeholders
+	local descriptor, computed, placeholders, data
 
 	-- See if we previously saved off the computed result
 	if type(el)=='string' then
 		descriptor = el
 		local compdata = self._computed[descriptor]
 		if compdata then
-			computed,placeholders = compdata[1],compdata[2]
+			computed,placeholders,data = compdata[1],compdata[2],compdata[3]
 		else
 			-- We didn't have one saved, so we need to parse the descriptor to an element table
 			el = self:parse_selector(descriptor, true)
+			data = el.data
 		end
 	end
 
@@ -240,16 +241,22 @@ function ZSS:match(el)
 
 	-- Cache the rules, placeholders, and environment if a string was used as the `el` descriptor
 	if descriptor and not self._computed[descriptor] then
-		self._computed[descriptor] = {computed,placeholders,env}
+		self._computed[descriptor] = {computed,placeholders,data}
 	end
 
 	-- If some of the values are code that needs to be evaluated, do so
 	if placeholders then
 		local result = {}
-		self._env.__item__ = el.data or {}
+		self._env._data_ = data or el.data or {}
 		for k,v in pairs(computed) do
 			if placeholders[k] then
-				v = v._zssfunc()
+				local ok,res = pcall(v._zssfunc)
+				if ok then
+					v=res
+				else
+					print('CSS error calculating "'..k..'": '..res)
+					v=nil
+				end
 			end
 			result[k] = v
 		end
