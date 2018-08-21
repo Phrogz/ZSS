@@ -1,39 +1,39 @@
 --[=========================================================================[
-   ZSS v0.6
+   ZSS v0.7
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.6" }
+local ZSS = { VERSION="0.7" }
 ZSS.__index = ZSS
 
 local updaterules
 
 -- ZSS:new{
---   functions  = {color=processColor, url=processURL },
---   constants  = {none=false, ['true']=true, ['false']=false, transparent=processColor(0,0,0,0) },
+--   constants  = { none=false, ['true']=true, ['false']=false, transparent=processColor(0,0,0,0), color=processColor },
 --   directives = { ['font-face']=processFontFaceRule },
 --   basecss    = [[...css code...]],
---   files      = {'a.css', 'b.css'},
+--   files      = { 'a.css', 'b.css' },
 -- }
 function ZSS:new(opts)
 	local zss = {
-		functions  = {}, -- function names (e.g. "url") mapped to function to process arguments into value
-		constants  = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
 		directives = {}, -- map from name of at rule (without @) to function to invoke
 		atrules    = {}, -- array of @font-face et. al, in document order; also indexed by rule name to array of declarations
+		_constants = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
 		_rules     = {}, -- map of doc ids to array of rule tables, each sorted by document order
 		_active    = {}, -- array of rule tables for active documents, sorted by specificity (rank)
 		_docs      = {}, -- array of document names, with each name mapped its active state
 		_computed  = {}, -- cached element signatures mapped to computed declarations
 		_kids      = setmetatable({},{__mode='k'}), -- set of child tables mapped to true
 		_parent    = nil, -- reference to the sheet that spawned this one
+		_env       = {},  -- table that mutates and changes to evaluate functions
 	}
+	setmetatable(zss._env,{__index=zss._constants})
 	setmetatable(zss,ZSS)
 	if opts then
-		if opts.functions  then zss:valueFunctions(opts.functions)    end
-		if opts.constants  then zss:valueConstants(opts.constants)    end
+		if opts.functions  then zss:constants(opts.functions)         end
+		if opts.constants  then zss:constants(opts.constants)         end
 		if opts.basecss    then zss:add(opts.basecss)                 end
 		if opts.files      then zss:load(table.unpack(opts.files))    end
 		if opts.directives then zss:handleDirectives(opts.directives) end
@@ -59,15 +59,19 @@ function ZSS:load(...)
 	return self
 end
 
--- Usage: myZSS:valueFunctions{ color=processColor, url=processURL }
-function ZSS:valueFunctions(handlermap)
-	for k,f in pairs(handlermap) do self.functions[k]=f end
-	return self
+function ZSS:valueFunctions(...)
+	print("ZSS:valueFunctions() is deprecated; use ZSS:constants() instead")
+	self:constants(...)
 end
 
--- Usage: myZSS:mapValues{ none=false, false=false, transparent=Color(0,0,0,0) }
-function ZSS:valueConstants(valuemap)
-	for k,v in pairs(valuemap) do self.constants[k]=v end
+function ZSS:valueConstants(...)
+	print("ZSS:valueConstants() is deprecated; use ZSS:constants() instead")
+	self:constants(...)
+end
+
+-- Usage: myZSS:mapValues{ none=false, transparent=Color(0,0,0,0), rgba=color.makeRGBA }
+function ZSS:constants(valuemap)
+	for k,v in pairs(valuemap) do self._constants[k]=v end
 	return self
 end
 
@@ -76,35 +80,28 @@ function ZSS:handleDirectives(handlermap)
 	return self
 end
 
--- Resolve values in declarations based on values and handlers
+-- Parse and evaluate values in declarations
 function ZSS:eval(str)
-	local result = self.constants[str]
-	if result==nil then result = tonumber(str) end
-	if result==nil then
-		result = str:match('^"(.-)"$') or str:match("^'(.-)'$")
-		if result==nil then
-			local func, params = str:match('^([%a_][%w_-]*)%(%s*(.-)%s*%)$')
-			if func then
-				local placeholders = false
-				local p={}
-				for param in params:gmatch('%s*([^,]+),?') do
-					local v = self:eval(param:gsub('%s+$',''))
-					if type(v)=='string' and v:sub(1,1)=='@' then
-						placeholders = true
-					end
-					table.insert(p,v)
-				end
-				if self.functions[func] and not placeholders then
-					result = self.functions[func](table.unpack(p))
-				else
-					result = { func=self.functions[func] or func, params=p }
-				end
+	if str:find('@') then
+		local f,err = load('return '..str:gsub('@','__item__.'), nil, 't', self._env)
+		if not f then
+			print(err)
+		else
+			return {_zssfunc=f}
+		end
+	else
+		local f,err = load('return '..str, nil, 't', self._constants)
+		if f then
+			local ok,res = pcall(f)
+			if ok then
+				return res
 			else
-				result = str
+				print('Error evaluating "'..str..'": '..res)
 			end
+		else
+			print('Error evaluating "'..str..'": '..err)
 		end
 	end
-	return result
 end
 
 -- Convert a selector string into its component pieces;
@@ -208,14 +205,16 @@ end
 -- Use an element descriptor will not use the cache (either for lookup or storing the result).
 -- Use element descriptors when you have data values that change.
 function ZSS:match(el)
-	local original = el
 	local descriptor, computed, placeholders
+
+	-- See if we previously saved off the computed result
 	if type(el)=='string' then
 		descriptor = el
 		local compdata = self._computed[descriptor]
 		if compdata then
 			computed,placeholders = compdata[1],compdata[2]
 		else
+			-- We didn't have one saved, so we need to parse the descriptor to an element table
 			el = self:parse_selector(descriptor, true)
 		end
 	end
@@ -229,29 +228,28 @@ function ZSS:match(el)
 				end
 			end
 		end
-		-- do this after the above loop, in case a placeholder got overwritten with explicit value
-		for k,v in pairs(computed) do
-			if type(v)=='table' and type(v.func)=='function' then
-				if not placeholders then placeholders = {} end
-				placeholders[k] = v
+		for prop,value in pairs(computed) do
+			if type(value)=='table' and value._zssfunc then
+				if not placeholders then
+					placeholders = {}
+				end
+				placeholders[prop] = value._zssfunc
 			end
 		end
 	end
 
-	if descriptor then
-		self._computed[descriptor] = {computed,placeholders}
+	-- Cache the rules, placeholders, and environment if a string was used as the `el` descriptor
+	if descriptor and not self._computed[descriptor] then
+		self._computed[descriptor] = {computed,placeholders,env}
 	end
 
+	-- If some of the values are code that needs to be evaluated, do so
 	if placeholders then
 		local result = {}
-		local data = el.data or {}
+		self._env.__item__ = el.data or {}
 		for k,v in pairs(computed) do
 			if placeholders[k] then
-				local p = {}
-				for i,param in ipairs(v.params) do
-					p[i]=type(param)=='string' and param:sub(1,1)=='@' and data[param:sub(2)] or param
-				end
-				v = v.func(table.unpack(p))
+				v = v._zssfunc()
 			end
 			result[k] = v
 		end
@@ -286,8 +284,7 @@ end
 function ZSS:extend(...)
 	local kid = ZSS:new()
 	kid._parent = self
-	setmetatable(kid.constants,{__index=self.constants})
-	setmetatable(kid.functions,{__index=self.functions})
+	setmetatable(kid._constants,{__index=self._constants})
 	setmetatable(kid.directives,{__index=self.directives})
 	self._kids[kid] = true
 	kid:load(...)

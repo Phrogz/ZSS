@@ -5,12 +5,12 @@
 * { fill:none; stroke:'magenta';
     stroke-width:1; font:'main' }
 
-text { font:'main'; fill:color('white'); stroke:none; size:12; opacity:0.5 }
+text { font:'main'; fill:"color('white')"; stroke:none; size:12; opacity:0.5 }
 
 text.detection { size:8; fill:green }
 .detection { fill:color('#ffff0033'); stroke:'yellow'; stroke-width:2 }
 
-.danger { fill:rgba(2,0,0); size:18; effect:glow(yellow,3) }
+.danger { fill:rgba(2,@speed,0); size:18; effect:glow(yellow,3) }
 .pedestrian { fill:purple; fill-opacity:0.3 }
 .child      { fill-opacity:0.8 }
 
