@@ -6,17 +6,18 @@ It is generic:
 
 * There is no assumption about the set of element types (names), ids, classes, or attributes allowed.
 * There is no enforcement about the set of legal declaration names or values.
+* It supports handlers to process "at-rules" as they are seen.
 * It supports user-specified mappings to convert value keywords to Lua values.  
   For example, you can make `{ fill:none }` in CSS turn into `{fill=false}` in Lua.
 * It supports user-specified mappings to convert function calls to Lua values.  
   For example, you can make `{ fill:hsv(137°, 0.5, 2.7) }` in CSS turn into `fill = {r=0, g=2.7, b=0.765}` in Lua.
+   * Functions can use placeholder values that are resolved during match time, for example:
 
 It has a few simplifications/limitations:
 
 * It assumes a **flat, unordered data model**. This means that there are no hierarchical selectors (no descendants, no children), no sibling selectors, and no pseudo-elements related to position.
-* Other than mapping keywords to values, it only supports numbers, strings, and function calls as data types. There is currently no support for custom units on numbers.
-* It only supports a few data attribute queries (currently attribute presence, =, <, and >).
-* It does not (currently) provide access to the element/attributes when resolving functions. (This allows all functions known to be run once at parse time, with the resulting value cached.)
+* Other than mapping keywords and functions, it only supports numbers, strings, and function calls as primitive data types. There is currently no support for custom units on numbers.
+* It only supports simple data attribute queries: attribute presence, =, <, and >.
 * Due to a simple parser, you must not have a `{` character inside a selector, or a `}` character inside a rule.
 
 ## Example Usage
@@ -25,7 +26,7 @@ It has a few simplifications/limitations:
 ZSS   = require'zss'
 color = require'color'
 
-local sheet = ZSS:new{
+local style = ZSS:new{
   constants = { none=false, transparent=false, visible=true },
   functions = {
     rgb=function(r,g,b) return color{ r=r, g=g, b=b } end,
@@ -38,9 +39,9 @@ local sheet = ZSS:new{
     text { font:main; fill:white; stroke:none }
   ]]
 }
-sheet:valueConstants(color.predefined)
+style:valueConstants(color.predefined)
 
-sheet:load('my.css')
+style:load('my.css')
 --> my.css has the contents
 -->
 --> @font-face { font-family:main; src:'DINPro-Light.ttf' }
@@ -53,23 +54,23 @@ sheet:load('my.css')
 --> text.negative { color:red }
 --> *[speed>20] { effect:flash(0.5, 3) }
 
-sheet:match{ type=line }
+style:match{ type=line }
 --> { fill=false, size=20, stroke=<color 'white'> }
 
-sheet:match'line'
+style:match'line'
 --> { fill=false, size=20, stroke=<color 'white'> }
 
-sheet:match'text'
+style:match'text'
 --> { fill=<color 'white'>, font='main', size=20, stroke=false }
 
-sheet:match'text.important'
+style:match'text.important'
 --> { fill=<color r=1.0 g=1.0 b=0.0 a=1.0>, font='main', size=20, stroke=false }
 
-sheet:match'#title.danger.important'
+style:match'#title.danger.important'
 --> { fill=<color r=2.0 g=0.0 b=0.0 a=1.0>, font='bold', opacity=1, size=20,
 -->   stroke=<color 'white'> }
 
-sheet:match{ type=text, tags={debug=1}, data={speed=37} }
+style:match{ type=text, tags={debug=1}, data={speed=37} }
 --> { effect={ func='flash', params={ 0.5, 3 }  },
 -->   fill=<color 'white'>, opacity=0.2, size=20, stroke=<color 'white'> }
 ```
@@ -79,8 +80,8 @@ sheet:match{ type=text, tags={debug=1}, data={speed=37} }
 As seen in the example above, you can describe an 'element' to find declarations for using either a table or a string. The two are equivalent in terms of _functionality_:
 
 ```lua
-sheet:match{ type='line', id='forecast', tags={tag1=1,tag2=1}, data={ clouds=85 } }
-sheet:match'line#forecast.tag1.tag2[clouds=85]'
+style:match{ type='line', id='forecast', tags={tag1=1,tag2=1}, data={ clouds=85 } }
+style:match'line#forecast.tag1.tag2[clouds=85]'
 ```
 
 They differ in terms of performance and memory implications, however:
@@ -95,7 +96,7 @@ If you have elements whose tags or (notably) attribute values are constantly cha
 
 # API
 
-* [`ZSS:new()`](#zssnewopts) — create a sheet
+* [`ZSS:new()`](#zssnewopts) — create a style (aggregating many sheets and rules)
 * [`myZSS:constants()`](#myzssconstantsvalue_map) — set value replacements
 * [`myZSS:functions()`](#myzssfunctionshandler_map) — set function handlers
 * [`myZSS:add()`](#myzssaddcss) — parse CSS from string
@@ -119,7 +120,7 @@ If you have elements whose tags or (notably) attribute values are constantly cha
 
 ```lua
 ZSS = require'zss'
-local sheet = ZSS:new{
+local style = ZSS:new{
   values   = {none=false, ['true']=true, ['false']=false, transparent=processColor(0,0,0,0) },
   handlers = {color=processColor, url=processURL },
   basecss  = [[...css code...]],
@@ -146,10 +147,10 @@ The return value is the invoking ZSS stylesheet instance (for method chaining).
 ### Example:
 
 ```lua
-local sheet = ZSS:new()
-sheet:values{ none=false, white={1,1,1}, red={1,0,0} }
-sheet:add('* {a:none; b:white; c:red; d:orange } ')
-sheet:match 'x'
+local style = ZSS:new()
+style:values{ none=false, white={1,1,1}, red={1,0,0} }
+style:add('* {a:none; b:white; c:red; d:orange } ')
+style:match 'x'
 --> { a=false, b={1,1,1}, c={1,0,0}, d='orange' }
 ```
 
@@ -173,14 +174,14 @@ function lerpColors(c1, c2, pct)
   return result
 end
 
-local sheet = ZSS:new()
-sheet:values{ white={1,1,1}, red={1,0,0} }
-sheet:handlers{ blend=lerpColors }
-sheet:add'.step1 { fill:blend(red, white, 0.2) }'
-sheet:add'.step2 { fill:blurn(red) }'
-sheet:match{ tags={step1=1} }
+local style = ZSS:new()
+style:values{ white={1,1,1}, red={1,0,0} }
+style:handlers{ blend=lerpColors }
+style:add'.step1 { fill:blend(red, white, 0.2) }'
+style:add'.step2 { fill:blurn(red) }'
+style:match{ tags={step1=1} }
 --> { fill={ 1.0, 0.2, 0.2 } }
-sheet:match'.step2'
+style:match'.step2'
 --> { fill={ func='blurn', params={ {1,0,0} } } }
 ```
 
@@ -190,7 +191,7 @@ If a function is encountered that has no matching handler, a parsed table with t
 
 ## myZSS:add(css)
 
-Add CSS rules to the sheet (specified as a string of CSS).
+Add CSS rules to the style (specified as a string of CSS).
 
 **Notes**:
 
@@ -200,8 +201,8 @@ Add CSS rules to the sheet (specified as a string of CSS).
 ### Example:
 
 ```lua
-local sheet = ZSS:new()
-sheet:add[[
+local style = ZSS:new()
+style:add[[
   /* CSS comments are recognized and ignored */
   @some-rule { note:'at rules are supported' }
   #special   { x:1; y:2.0; z:'three'; q:sum(1,2,1) }
@@ -216,8 +217,8 @@ Add CSS rules to the stylesheet, loaded from one or more files specified by file
 ### Example:
 
 ```lua
-local sheet = ZSS:new()
-sheet:load( 'a.css', 'b.css', 'c.css' )
+local style = ZSS:new()
+style:load('a.css', 'b.css', 'c.css')
 ```
 
 
@@ -232,11 +233,11 @@ See the section _[Descriptor Tables versus Strings](#descriptor-tables-versus-st
 _Tip_: while tag, id, and data order doesn't matter for computing the declarations that apply, each unique string will recompute the applicable declarations instead of using the cache. For example, the following five strings all produce the same results, but require the table to be recomputed five times instead of cached:
 
 ```lua
-local d1 = sheet:match'foo#bar.jim.jam[a=7]'
-local d2 = sheet:match'foo#bar.jam.jim[a=7]'
-local d3 = sheet:match'foo.jim#bar.jam[a=7]'
-local d4 = sheet:match'foo[a=7]#bar.jim.jam'
-local d5 = sheet:match'foo[a=7].jim.jam#bar'
+local d1 = style:match'foo#bar.jim.jam[a=7]'
+local d2 = style:match'foo#bar.jam.jim[a=7]'
+local d3 = style:match'foo.jim#bar.jam[a=7]'
+local d4 = style:match'foo[a=7]#bar.jim.jam'
+local d5 = style:match'foo[a=7].jim.jam#bar'
 ```
 
 Consequently, it is advisable to establish a convention when crafting your strings. The author of ZSS recommends type/id/tags/data, where tags and data are ordered alphabetically. For example: `type#id.t1.t2[a1=1][a2=2]`.
@@ -244,33 +245,33 @@ Consequently, it is advisable to establish a convention when crafting your strin
 ### Example:
 
 ```lua
-local sheet = ZSS:new():add[[
+local style = ZSS:new():add[[
   * { fill:none; stroke:white; opacity:1.0 }
   text { fill:white; stroke:none }
   .important { weight:bold; fill:red }
   .debug     { opacity:0.5 }
 ]]
-local m1 = sheet:match('text.important')
+local m1 = style:match('text.important')
 --> { fill='red', opacity=1.0, stroke='none', weight='bold' }
 
-local m2 = sheet:match{ type='line', tags={debug=1} }
+local m2 = style:match{ type='line', tags={debug=1} }
 --> { fill='none', opacity=1.0, stroke='white' }
 ```
 
 
 ## myZSS:extend(...)
 
-Creates a new ZSS sheet that derives from this sheet, while retaining a live link to its state. Rules in the 'parent' sheet supercede rules in the new sheet (for the same rank). If you pass any filenames, they will be passed to `load()`. (In other words, `local b = a:extend('a.css', 'b.css')` is a shorthand for `local b = a:extend():load('a.css', 'b.css')`.)
+Creates a new ZSS style that derives from this style, while retaining a live link to its state. Rules in the new style supercede rules in the 'parent' style (for the same rank). If you pass any filenames, they will be passed to `load()`. (In other words, `local b = a:extend('a.css', 'b.css')` is a shorthand for `local b = a:extend():load('a.css', 'b.css')`.)
 
 ### Example:
 
 ```lua
-local main = ZSS:new{ files={'base.css', 'day.css'} }
-local doc1 = main:extend():load('doc1.css') -- doc1:match() uses base.css, day.css, and doc1.css
-local doc2 = main:extend('doc2.css')        -- doc2:match() uses base.css, day.css, and doc2.css
+local main   = ZSS:new{ files={'base.css', 'day.css'} }
+local style1 = main:extend():load('style1.css') -- style1:match() uses base.css, day.css, and style1.css
+local style2 = main:extend('style2.css')        -- style2:match() uses base.css, day.css, and style2.css
 main:disable('day.css')
 main:load('night.css')
---> now doc1:match() uses base.css, **night.css**, and doc1.css
+--> now style1:match() uses base.css, **night.css**, and style1.css
 ```
 
 ## myZSS:disable(sheetid)
@@ -280,25 +281,25 @@ Prevent a specific set of CSS from being used in the sheet (and all descendants 
 ### Example:
 
 ```lua
-local main  = ZSS:new{ files={'base.css', 'day.css'} }
-local doc1  = main:clone():load('doc1a.css')
-local _,bid = doc1:add('#additional { rules:here }')
+local main   = ZSS:new{ files={'base.css', 'day.css'} }
+local style1 = main:clone():load('style1a.css')
+local _, bID = style1:add('#additional { rules:here }')
 
-doc1:match() --> uses base.css, day.css, doc1a.css, and additional rules loaded during add()
+style1:match() --> uses base.css, day.css, style1a.css, and additional rules loaded during add()
 
-doc1:disable(bid)
-doc1:match() --> uses base.css, day.css, doc1a.css
+style1:disable(bID)
+style1:match() --> uses base.css, day.css, style1a.css
 
 main:disable('day.css')
-doc1:match() --> uses base.css and doc1a.css
+style1:match() --> uses base.css and style1a.css
 main:match() --> uses base.css only
 
 main:enable('day.css')
-doc1:match() --> uses base.css, day.css, and doc1a.css
+style1:match() --> uses base.css, day.css, and style1a.css
 main:match() --> uses base.css and day.css
 
-doc1:disable('day.css')
-doc1:match() --> uses base.css and doc1a.css
+style1:disable('day.css')
+style1:match() --> uses base.css and doc1a.css
 main:match() --> uses base.css and day.css
 ```
 

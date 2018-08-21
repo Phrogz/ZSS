@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.5
+   ZSS v0.6
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.5" }
+local ZSS = { VERSION="0.6" }
 ZSS.__index = ZSS
 
 local updaterules
@@ -85,14 +85,19 @@ function ZSS:eval(str)
 		if result==nil then
 			local func, params = str:match('^([%a_][%w_-]*)%(%s*(.-)%s*%)$')
 			if func then
+				local placeholders = false
 				local p={}
 				for param in params:gmatch('%s*([^,]+),?') do
-					table.insert(p,self:eval(param:gsub('%s+$','')))
+					local v = self:eval(param:gsub('%s+$',''))
+					if type(v)=='string' and v:sub(1,1)=='@' then
+						placeholders = true
+					end
+					table.insert(p,v)
 				end
-				if self.functions[func] then
+				if self.functions[func] and not placeholders then
 					result = self.functions[func](table.unpack(p))
 				else
-					result = { func=func, params=p }
+					result = { func=self.functions[func] or func, params=p }
 				end
 			else
 				result = str
@@ -202,31 +207,57 @@ end
 --
 -- Use an element descriptor will not use the cache (either for lookup or storing the result).
 -- Use element descriptors when you have data values that change.
-function ZSS:match(el)
-	local descriptor
+function ZSS:match(el, data)
+	local descriptor, computed, placeholders
+	data = data or {}
 	if type(el)=='string' then
 		descriptor = el
-		if self._computed[descriptor] then
-			return self._computed[descriptor]
+		local compdata = self._computed[descriptor]
+		if compdata then
+			computed,placeholders = compdata[1],compdata[2]
 		else
 			el = self:parse_selector(descriptor, true)
 		end
 	end
 
-	local computed = {}
-	for _,rule in ipairs(self._active) do
-		if ZSS.matches(rule.selector, el) then
-			for k,v in pairs(rule.declarations) do
-				computed[k] = v
+	if not computed then
+		computed = {}
+		for _,rule in ipairs(self._active) do
+			if ZSS.matches(rule.selector, el) then
+				for k,v in pairs(rule.declarations) do
+					computed[k] = v
+				end
+			end
+		end
+		-- do this after the above loop, in case a placeholder got overwritten with explicit value
+		for k,v in pairs(computed) do
+			if type(v)=='table' and type(v.func)=='function' then
+				if not placeholders then placeholders = {} end
+				placeholders[k] = v
 			end
 		end
 	end
 
 	if descriptor then
-		self._computed[descriptor] = computed
+		self._computed[descriptor] = {computed,placeholders}
 	end
 
-	return computed
+	if placeholders then
+		local result = {}
+		for k,v in pairs(computed) do
+			if placeholders[k] then
+				local p = {}
+				for i,param in ipairs(v.params) do
+					p[i]=type(param)=='string' and param:sub(1,1)=='@' and data[param:sub(2)] or param
+				end
+				v = v.func(table.unpack(p))
+			end
+			result[k] = v
+		end
+		return result
+	else
+		return computed
+	end
 end
 
 -- Test to see if an element descriptor table matches a specific selector table
