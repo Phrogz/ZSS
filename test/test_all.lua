@@ -167,8 +167,8 @@ function test.functions_nested()
 		]]
 	}
 	assertEqual(style:match('a').p, 42, 'add() function works on flat values')
-	assertEqual(style:match('b').p, 42, 'nested non-placeholder functions are run')
-	assertEqual(style:match('c[x=17][y=16][z=15]').p, 48, 'nested placeholder functions are run')
+	assertEqual(style:match('b').p, 42, 'nested non-placeholder functions are properly parsed and run')
+	assertEqual(style:match('c[x=17][y=16][z=15]').p, 48, 'nested placeholder functions are properly parsed and run')
 end
 
 function test.functions_with_placeholders()
