@@ -22,7 +22,8 @@ function test.load_two_sheets()
 end
 
 function test.extend_a_style()
-	local style1, id1 = zss:new():add('a {a:1} b {b:1}')
+	local null = function() return {} end
+	local style1, id1 = zss:new{constants={fx=null, rgba=null}}:add('a {a:1} b {b:1}')
 	local style2, id2 = style1:extend():add('a {a:2}')
 	assert(id2, 'style:add() must return an id')
 	assertNotEqual(id1, id2, 'style:add() must return unique ids')
@@ -31,9 +32,8 @@ function test.extend_a_style()
 	assertEqual(style2:match('a').a, 2)
 	assertEqual(style2:match('b').b, 1, 'extended styles must inherit from their parent')
 
-	-- FIXME: load a CSS that isn't broken
-	-- local style3 = style1:extend('test1.css')
-	-- assertEqual(style3:match('.danger').size, 18, 'should be able to pass filenames to load to extend')
+	local style3 = style1:extend('danger.css')
+	assertEqual(style3:match('.danger').size, 18, 'should be able to pass filenames to load to extend')
 end
 
 function test.extensions_and_values()
@@ -122,17 +122,20 @@ end
 
 -- This is a bit of an implementation test, relying on nominally internal data structures
 function test.test_caching()
-	-- FIXME: load a CSS that isn't broken
-	-- local style = zss:new{files={'test1.css'}}
-	-- assertTableEmpty(style._computed)
-	-- for i=1,10 do style:match(string.format('pedestrian[ttc=%.1f]', i/10)) end
-	-- assertEqual(countkeys(style._computed), 10, 'unique strings should result in unique cached computes')
+	local style = zss:new():constants{ fx=function() return {} end }:add[[
+		*           { fill:none; stroke:'magenta'; stroke-width:1; font:'main' }
+		.pedestrian { fill:'purple'; fill-opacity:0.3 }
+		*[ttc<1.5]  { effect:fx('flash',0.2) }
+	]]
+	assertTableEmpty(style._computed)
+	for i=1,10 do style:match(string.format('pedestrian[ttc=%.1f]', i/10)) end
+	assertEqual(countkeys(style._computed), 10, 'unique strings should result in unique cached computes')
 
-	-- for i=1,10 do style:match(string.format('pedestrian[ttc=%.1f]', i/10)) end
-	-- assertEqual(countkeys(style._computed), 10, 'repeated strings must not grow the cache')
+	for i=1,10 do style:match(string.format('pedestrian[ttc=%.1f]', i/10)) end
+	assertEqual(countkeys(style._computed), 10, 'repeated strings must not grow the cache')
 
-	-- for i=1,100 do style:match({type='pedestrian', data={ttc=i}}) end
-	-- assertEqual(countkeys(style._computed), 10, 'table-based queries must not grow the cache')
+	for i=1,100 do style:match({type='pedestrian', data={ttc=i}}) end
+	assertEqual(countkeys(style._computed), 10, 'table-based queries must not grow the cache')
 end
 
 function test.functions_with_values()
