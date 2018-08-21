@@ -207,9 +207,9 @@ end
 --
 -- Use an element descriptor will not use the cache (either for lookup or storing the result).
 -- Use element descriptors when you have data values that change.
-function ZSS:match(el, data)
+function ZSS:match(el)
+	local original = el
 	local descriptor, computed, placeholders
-	data = data or {}
 	if type(el)=='string' then
 		descriptor = el
 		local compdata = self._computed[descriptor]
@@ -244,6 +244,7 @@ function ZSS:match(el, data)
 
 	if placeholders then
 		local result = {}
+		local data = el.data or {}
 		for k,v in pairs(computed) do
 			if placeholders[k] then
 				local p = {}
