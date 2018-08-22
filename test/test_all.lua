@@ -125,7 +125,7 @@ function test.test_caching()
 	local style = zss:new():constants{ fx=function() return {} end }:add[[
 		*           { fill:none; stroke:'magenta'; stroke-width:1; font:'main' }
 		.pedestrian { fill:'purple'; fill-opacity:0.3 }
-		*[ttc<1.5]  { effect:fx('flash',0.2) }
+		*[@ttc<1.5] { effect:fx('flash',0.2) }
 	]]
 	assertTableEmpty(style._computed)
 	for i=1,10 do style:match(string.format('pedestrian[ttc=%.1f]', i/10)) end
@@ -220,8 +220,8 @@ function test.functions_with_placeholders()
 	local style = zss:new{
 		functions = { add=function(a,b) return a+b end },
 		basecss   = [[
-			a[x=17] { p1:add(25,@x) }
-			a[x=25] { p2:add(17,@x) }
+			a[@x=17] { p1:add(25,@x) }
+			a[@x=25] { p2:add(17,@x) }
 		]]
 	}
 	assertEqual(style:match('a[x=17]').p1, 42)
@@ -249,7 +249,7 @@ function test.functions_with_extensions()
 	assertEqual(style2:match('l').c, 4, 'extension styles must have access to their own handlers')
 end
 
-function test.matching()
+function test.matching_simple()
 	local style = zss:new{ basecss=[[
 		a { a:1 }
 		.b { b:1 }
@@ -289,4 +289,44 @@ function test.matching()
 	assertNil(style:match('.d').de)
 end
 
-test()
+function test.matching_attr()
+	local style = zss:new():constants{x=42}:add[[
+		*       { c:true }
+		*[@x]   { x:@x   }
+		t[@x<5] { op:'<' }
+		t[@x>5] { op:'>' }
+		t[@x=5] { op:'=' }
+		t[5<@x] { po:'>' }
+		t[5>@x] { po:'<' }
+		t[5=@x] { po:'=' }
+	]]
+
+	assertEqual(style:match('z').c, true)
+	assertNil(style:match('z').x,                           'constants must not leak as attributes')
+	assertEqual(style:match('z[x=17]').x,               17, 'can find attributes from string')
+	assertEqual(style:match{type='z', data={x=17}}.x,   17, 'can find attributes from table')
+	assertNil(style:match('z[x=17]').op,                    'attributes must not ignore other selectors')
+	assertEqual(style:match{type='t', data={x=5}}.op,  '=', '[@foo=42] works')
+	assertEqual(style:match('t[x=5]').op,              '=', '[@foo=42] works')
+	assertEqual(style:match{type='t', data={x=9}}.op,  '>', '[@foo>42] works')
+	assertEqual(style:match('t[x=9]').op,              '>', '[@foo>42] works')
+	assertEqual(style:match{type='t', data={x=1}}.op,  '<', '[@foo<42] works')
+	assertEqual(style:match('t[x=1]').op,              '<', '[@foo<42] works')
+end
+
+function test.matching_attr_reverse()
+	local style = zss:new():constants{x=42}:add[[
+		t[5<@x] { po:'>' }
+		t[5=@x] { po:'=' }
+		t[5>@x] { po:'<' }
+	]]
+	assertNil(style:match('t').po,                          'reversed attributes should not be ignored')
+	assertEqual(style:match('t[x=5]').po,              '=', '[42=@foo] works')
+	assertEqual(style:match{type='t', data={x=5}}.po,  '=', '[42=@foo] works')
+	assertEqual(style:match('t[x=9]').po,              '>', '[42<@foo] works')
+	assertEqual(style:match{type='t', data={x=9}}.po,  '>', '[42<@foo] works')
+	assertEqual(style:match('t[x=1]').po,              '<', '[42>@foo] works')
+	assertEqual(style:match{type='t', data={x=1}}.po,  '<', '[42>@foo] works')
+end
+
+test{ quiet=true }

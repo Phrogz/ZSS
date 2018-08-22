@@ -116,6 +116,7 @@ function ZSS:parse_selector(selector_str, from_data)
 			tags={}, data={}
 		}
 
+		-- Find all the tags
 		for name in selector_str:gmatch('%.([%a_][%w_-]*)') do
 			selector.tags[name] = true
 			if not from_data then
@@ -124,14 +125,17 @@ function ZSS:parse_selector(selector_str, from_data)
 		end
 		if not from_data then table.sort(selector.tags) end
 
+		-- Find all attribute-presence tests, e.g. foo[@attr]
 		if not from_data then
-			for name in selector_str:gmatch('%[%s*([%a_][%w_-]*)%s*%]') do
+			for name in selector_str:gmatch('%[%s*@?([%a_][%w_-]*)%s*%]') do
+				print(selector_str, 'founda', name)
 				selector.data[name] = true
 				selector.data[#selector.data+1] = name
 			end
 		end
 
-		for name, op, val in selector_str:gmatch('%[%s*([%a_][%w_-]*)%s*([<=>])%s*(.-)%s*%]') do
+		-- Find all [@attr<val], [@attr=val], [@attr>val]
+		for name, op, val in selector_str:gmatch('%[%s*@?([%a_][%w_-]*)%s*([<=>])%s*(.-)%s*%]') do
 			if from_data then
 				if op=='=' then
 					selector.data[name] = self:eval(val)
@@ -141,6 +145,7 @@ function ZSS:parse_selector(selector_str, from_data)
 				selector.data[#selector.data+1] = name
 			end
 		end
+
 		if not from_data then table.sort(selector.data) end
 
 		return selector
