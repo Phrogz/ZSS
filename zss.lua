@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.7
+   ZSS v0.7.1
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.7" }
+local ZSS = { VERSION="0.7.1" }
 ZSS.__index = ZSS
 
 local updaterules
