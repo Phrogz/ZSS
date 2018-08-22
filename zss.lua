@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.7.1
+   ZSS v0.7.2
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.7.1" }
+local ZSS = { VERSION="0.7.2" }
 ZSS.__index = ZSS
 
 local updaterules
@@ -125,24 +125,28 @@ function ZSS:parse_selector(selector_str, from_data)
 		end
 		if not from_data then table.sort(selector.tags) end
 
-		-- Find all attribute-presence tests, e.g. foo[@attr]
-		if not from_data then
-			for name in selector_str:gmatch('%[%s*@?([%a_][%w_-]*)%s*%]') do
-				print(selector_str, 'founda', name)
-				selector.data[name] = true
-				selector.data[#selector.data+1] = name
-			end
-		end
-
-		-- Find all [@attr<val], [@attr=val], [@attr>val]
-		for name, op, val in selector_str:gmatch('%[%s*@?([%a_][%w_-]*)%s*([<=>])%s*(.-)%s*%]') do
-			if from_data then
-				if op=='=' then
+		-- Find all attribute sections, e.g. [@attr], [@attr<17], [attr=12], …
+		for attr in selector_str:gmatch('%[%s*(.-)%s*%]') do
+			local attr_name_only = attr:match('^@?([%a_][%w_-]*)$')
+			if attr_name_only then
+				selector.data[attr_name_only] = true
+				if not from_data then table.insert(selector.data, attr_name_only) end
+			elseif from_data then
+				local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*(=)%s*(.-)$')
+				if not name or op~='=' then
+					print(string.format("WARNING: ignoring invalid data assignment '%s' in item descriptor '%s'", attr, selector_str))
+				else
 					selector.data[name] = self:eval(val)
 				end
 			else
-				selector.data[name] = { op=op, value=self:eval(val) }
-				selector.data[#selector.data+1] = name
+				local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*([<=>])%s*(.-)$')
+				if not name then
+					print(string.format("WARNING: invalid attribute selector '%s' in '%s'; must be like [@name < 42]", attr, selector_str))
+					return nil
+				else
+					selector.data[name] = { op=op, value=self:eval(val) }
+					table.insert(selector.data, name)
+				end
 			end
 		end
 
@@ -173,22 +177,24 @@ function ZSS:add(css, sheetid)
 		local selectors_str = rule_str:match('(.-)%s*{')
 		for selector_str in selectors_str:gmatch('%s*([^,]+)') do
 			local selector = self:parse_selector(selector_str:match "^%s*(.-)%s*$")
-			if selector.directive then
-				selector.declarations = declarations
-				table.insert(self.atrules, selector)
-				self.atrules[selector.directive] = self.atrules[selector.directive] or {}
-				table.insert(self.atrules[selector.directive], declarations)
-				local handler = self.directives[string.sub(selector.directive,2)]
-				if handler then handler(self, declarations) end
-			else
-				selector.rank = {
-					selector.id and 1 or 0,
-					#selector.tags + #selector.data,
-					selector.type and 1 or 0,
-					0 -- the document order will be determined during updaterules()
-				}
-				local rule = {selector=selector, declarations=declarations, doc=sheetid}
-				table.insert(docrules, rule)
+			if selector then
+				if selector.directive then
+					selector.declarations = declarations
+					table.insert(self.atrules, selector)
+					self.atrules[selector.directive] = self.atrules[selector.directive] or {}
+					table.insert(self.atrules[selector.directive], declarations)
+					local handler = self.directives[string.sub(selector.directive,2)]
+					if handler then handler(self, declarations) end
+				else
+					selector.rank = {
+						selector.id and 1 or 0,
+						#selector.tags + #selector.data,
+						selector.type and 1 or 0,
+						0 -- the document order will be determined during updaterules()
+					}
+					local rule = {selector=selector, declarations=declarations, doc=sheetid}
+					table.insert(docrules, rule)
+				end
 			end
 		end
 	end

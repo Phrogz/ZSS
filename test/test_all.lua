@@ -314,19 +314,22 @@ function test.matching_attr()
 	assertEqual(style:match('t[x=1]').op,              '<', '[@foo<42] works')
 end
 
-function test.matching_attr_reverse()
-	local style = zss:new():constants{x=42}:add[[
-		t[5<@x] { po:'>' }
-		t[5=@x] { po:'=' }
-		t[5>@x] { po:'<' }
+function test.invalid_selectors()
+	local style = zss:new():add[[
+		t         { x:'OK' }
+		t[5<@x]   { x:'no' }
+		t[5=@x]   { x:'no' }
+		t[5>@x]   { x:'no' }
+		t[true]   { x:'no' }
+		t[17]     { x:'no' }
+		t['@x<5'] { x:'no' }
+		!t!       { x:'no' }
+		!t        { x:'no' }
+		t!        { x:'no' }
 	]]
-	assertNil(style:match('t').po,                          'reversed attributes should not be ignored')
-	assertEqual(style:match('t[x=5]').po,              '=', '[42=@foo] works')
-	assertEqual(style:match{type='t', data={x=5}}.po,  '=', '[42=@foo] works')
-	assertEqual(style:match('t[x=9]').po,              '>', '[42<@foo] works')
-	assertEqual(style:match{type='t', data={x=9}}.po,  '>', '[42<@foo] works')
-	assertEqual(style:match('t[x=1]').po,              '<', '[42>@foo] works')
-	assertEqual(style:match{type='t', data={x=1}}.po,  '<', '[42>@foo] works')
+	assertEqual(style:match('t').x,      'OK', 'invalid selectors must not be applied')
+	assertEqual(style:match('t[x]').x,   'OK', 'invalid selectors must not be applied')
+	assertEqual(style:match('t[x=1]').x, 'OK', 'invalid selectors must not be applied')
 end
 
 test{ quiet=true }
