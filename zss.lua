@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.7.2
+   ZSS v0.8
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.7.2" }
+local ZSS = { VERSION="0.8" }
 ZSS.__index = ZSS
 
 local updaterules
@@ -18,25 +18,24 @@ local updaterules
 -- }
 function ZSS:new(opts)
 	local zss = {
-		directives = {}, -- map from name of at rule (without @) to function to invoke
-		atrules    = {}, -- array of @font-face et. al, in document order; also indexed by rule name to array of declarations
-		_constants = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
-		_rules     = {}, -- map of doc ids to array of rule tables, each sorted by document order
-		_active    = {}, -- array of rule tables for active documents, sorted by specificity (rank)
-		_docs      = {}, -- array of document names, with each name mapped its active state
-		_computed  = {}, -- cached element signatures mapped to computed declarations
-		_kids      = setmetatable({},{__mode='k'}), -- set of child tables mapped to true
-		_parent    = nil, -- reference to the sheet that spawned this one
-		_env       = {},  -- table that mutates and changes to evaluate functions
+		atrules     = {}, -- array of @font-face et. al, in document order; also indexed by rule name to array of declarations
+		_directives = {}, -- map from name of at rule (without @) to function to invoke
+		_constants  = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
+		_rules      = {}, -- map of doc ids to array of rule tables, each sorted by document order
+		_active     = {}, -- array of rule tables for active documents, sorted by specificity (rank)
+		_docs       = {}, -- array of document names, with each name mapped its active state
+		_computed   = {}, -- cached element signatures mapped to computed declarations
+		_kids       = setmetatable({},{__mode='k'}), -- set of child tables mapped to true
+		_parent     = nil, -- reference to the sheet that spawned this one
+		_env        = {},  -- table that mutates and changes to evaluate functions
 	}
 	setmetatable(zss._env,{__index=zss._constants})
 	setmetatable(zss,ZSS)
 	if opts then
-		if opts.functions  then zss:constants(opts.functions)         end
-		if opts.constants  then zss:constants(opts.constants)         end
-		if opts.basecss    then zss:add(opts.basecss)                 end
-		if opts.files      then zss:load(table.unpack(opts.files))    end
-		if opts.directives then zss:handleDirectives(opts.directives) end
+		if opts.constants  then zss:constants(opts.constants)      end
+		if opts.directives then zss:directives(opts.directives)    end
+		if opts.basecss    then zss:add(opts.basecss)              end
+		if opts.files      then zss:load(table.unpack(opts.files)) end
 	end
 	updaterules(zss)
 	return zss
@@ -75,8 +74,8 @@ function ZSS:constants(valuemap)
 	return self
 end
 
-function ZSS:handleDirectives(handlermap)
-	for k,v in pairs(handlermap) do self.directives[k]=v end
+function ZSS:directives(handlermap)
+	for k,v in pairs(handlermap) do self._directives[k]=v end
 	return self
 end
 
@@ -183,7 +182,7 @@ function ZSS:add(css, sheetid)
 					table.insert(self.atrules, selector)
 					self.atrules[selector.directive] = self.atrules[selector.directive] or {}
 					table.insert(self.atrules[selector.directive], declarations)
-					local handler = self.directives[string.sub(selector.directive,2)]
+					local handler = self._directives[string.sub(selector.directive,2)]
 					if handler then handler(self, declarations) end
 				else
 					selector.rank = {
@@ -303,7 +302,7 @@ function ZSS:extend(...)
 	local kid = ZSS:new()
 	kid._parent = self
 	setmetatable(kid._constants,{__index=self._constants})
-	setmetatable(kid.directives,{__index=self.directives})
+	setmetatable(kid._directives,{__index=self._directives})
 	self._kids[kid] = true
 	kid:load(...)
 	return kid

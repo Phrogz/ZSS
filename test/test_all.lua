@@ -100,9 +100,9 @@ function test.at_rules()
 	assertEqual(style.atrules['@foo-bar'][2].a, 4)
 end
 
-function test.atrule_handler()
+function test.directives()
 	local style = zss:new()
-	style:handleDirectives{
+	style:directives{
 		brush = function(me, declarations)
 			assertEqual(me, style)
 			assertEqual(declarations.name,'foo')
@@ -111,7 +111,18 @@ function test.atrule_handler()
 		end
 	}
 	style:add '@brush { name:"foo"; src:"bar" }'
-	assert(style.foundBrush, 'handleDirectives must run when an at rule is seen')
+	assert(style.foundBrush, 'directives must run when an at rule is seen')
+
+	local style = zss:new()
+	style:constants{ white = 'white' }
+	style:directives{ vars = function(me, props) me:constants(props) end }
+	style:directives{ white = function() end }
+	style:add[[
+	  @vars { uiscale:1.5; fg:white }
+	  text { size:12*uiscale; fill:fg }
+	]]
+	assertEqual(style:match('text').size, 18)
+	assertEqual(style:match('text').fill, 'white')
 end
 
 local function countkeys(t)
@@ -140,8 +151,8 @@ end
 
 function test.functions_with_values()
 	local style = zss:new{
-		constants = { x=17, y=false, yy=true },
-		functions = {
+		constants = {
+			x=17, y=false, yy=true,
 			a = function(...) return {...} end
 		},
 		basecss = [[
@@ -157,8 +168,8 @@ end
 
 function test.functions_nested()
 	local style = zss:new{
-		constants = { x=17, y=4 },
-		functions = {
+		constants = {
+			x=17, y=4,
 			add = function(...)
 				local sum=0
 				for _,n in ipairs{...} do sum = sum + (tonumber(n) or 0) end
@@ -179,7 +190,7 @@ end
 function test.functions_with_placeholders()
 	local ct1, ct2 = 0,0
 	local style = zss:new{
-		functions = {
+		constants = {
 			ct1  = function() ct1=ct1+1 return ct1 end,
 			ct2  = function() ct2=ct2+1 return ct2 end,
 			add  = function(a,b) return (tonumber(a) or 0)+(tonumber(b) or 0) end,
@@ -218,7 +229,7 @@ function test.functions_with_placeholders()
 	assertEqual(style:match({type='ct2', data={x=2}}).p6, 4, 'placholder functions get invoked each time, regardless of data')
 
 	local style = zss:new{
-		functions = { add=function(a,b) return a+b end },
+		constants = { add=function(a,b) return a+b end },
 		basecss   = [[
 			a[@x=17] { p1:add(25,@x) }
 			a[@x=25] { p2:add(17,@x) }
@@ -231,13 +242,13 @@ function test.functions_with_placeholders()
 end
 
 function test.functions_with_extensions()
-	local f1,f2 = {},{}
-	function f1.a() return 1 end
-	function f1.b() return 2 end
-	function f2.b() return 3 end
-	function f2.c() return 4 end
-	local style1 = zss:new{functions=f1, basecss='a {a:a()} b {b:b()} c {c:c()}'}
-	local style2 = style1:extend():constants(f2):add('j {a:a()} k {b:b()} l {c:c()}')
+	local t1,t2 = {},{}
+	function t1.a() return 1 end
+	function t1.b() return 2 end
+	function t2.b() return 3 end
+	function t2.c() return 4 end
+	local style1 = zss:new{constants=t1, basecss='a {a:a()} b {b:b()} c {c:c()}'}
+	local style2 = style1:extend():constants(t2):add('j {a:a()} k {b:b()} l {c:c()}')
 	assertEqual(style1:match('a').a, 1)
 	assertEqual(style1:match('b').b, 2)
 	assertEqual(style1:match('c').c, nil)

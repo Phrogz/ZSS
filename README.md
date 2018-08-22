@@ -2,23 +2,56 @@
 
 ZSS is a small, simple, pure Lua library that parses simple CSS (see below for limitations) rules and then computes the declarations to apply for a given 'element'.
 
-It is generic:
+## Features:
 
 * There is no assumption about the set of element types (names), ids, classes, or attributes allowed.
 * There is no enforcement about the set of legal declaration names or values.
 * It supports handlers to process "at-rules" as they are seen.
-* It supports user-specified mappings to convert value keywords to Lua values.  
-  For example, you can make `{ fill:none }` in CSS turn into `{fill=false}` in Lua.
-* It supports user-specified mappings to convert function calls to Lua values.  
-  For example, you can make `{ fill:hsv(137°, 0.5, 2.7) }` in CSS turn into `fill = {r=0, g=2.7, b=0.765}` in Lua.
-   * Functions can use placeholder values that are resolved during match time, for example:
+* It uses arbitrary Lua expressions for property values, with a sandbox table for resolving values and functions.
+  * _For example, you can make_ `{ fill:none }` _in CSS turn into_ `{fill=false}` _in Lua._
+  * _For example, you can make_ `{ fill:hsv(137°, 0.5, 2.7) }` _in CSS turn into_ `fill = {r=0, g=2.7, b=0.765}` in Lua._
+* Value expressions can use placeholder values that are deferred and resolved against data supplied with a query. For example:
+    ```lua
+    local C = require'color'
 
-It has a few simplifications/limitations:
+    local style=zss:new():constants{
+      white = C.white,
+      hsv   = function(h,s,v) return C:new{h=h,s=s,v=v} end
+    }:add[[
+      circle          { fill:white; r:3      }
+      circle[@r]      { radius:@r            }
+      circle[@hue]    { fill:hsv(@hue, 1, 1) }
+    ]]
+
+    local props = style:match('circle')
+    for k,v in pairs(props) do print(k,v) end
+    --> fill <color 'white'>
+    --> radius 3
+
+    local rnd=math.random
+    for r=1,4 do
+      local attrs = { r=r, hue=rnd(360) }
+      local props = style:match{type='circle', data=attrs}
+      for k,v in pairs(props) do print(k,v) end
+    end
+    --> fill <color r=1.0 g=0.0 b=1.0 a=1.0>
+    --> radius 1
+    --> fill <color r=0.0 g=1.0 b=0.4 a=1.0>
+    --> radius 2
+    --> fill <color r=0.7 g=0.0 b=1.0 a=1.0>
+    --> radius 3
+    --> fill <color r=0.8 g=0.0 b=1.0 a=1.0>
+    --> radius 4
+    ```
+
+
+## Simplifications/Limitations:
 
 * It assumes a **flat, unordered data model**. This means that there are no hierarchical selectors (no descendants, no children), no sibling selectors, and no pseudo-elements related to position.
-* Other than mapping keywords and functions, it only supports numbers, strings, and function calls as primitive data types. There is currently no support for custom units on numbers.
-* It only supports simple data attribute queries: attribute presence, =, <, and >.
-* Due to a simple parser, you must not have a `{` character inside a selector, or a `}` character inside a rule.
+* Using Lua to parse property expressions means there is no support for custom units on numbers using CSS syntax, or hexadecimal colors. You would need to wrap these in function calls like `len(5,cm)` or `color('#ff0033')`.
+* It only supports simple data attribute queries in selectors: attribute presence (`[@foo]`), and simple value comparisons (`[@foo<7.3]`, `[@foo=12]`, `[@foo>0.9]`).
+* Due to a simple parser, you must not have a `{` character inside a selector, or a `}` character inside your declarations.
+
 
 ## Example Usage
 
@@ -27,55 +60,58 @@ ZSS   = require'zss'
 color = require'color'
 
 local style = ZSS:new{
-  constants = { none=false, transparent=false, visible=true },
-  functions = {
+  constants = {
+    none        = false,
+    transparent = false,
+    visible     = true,
     rgb=function(r,g,b) return color{ r=r, g=g, b=b } end,
     hsv=function(h,s,v) return color{ h=h, s=s, v=v } end
-  },
-  basecss  = [[
-    @font-face { font-family:main; src:'Arial.ttf' }
-    @font-face { font-family:bold; src:'Arial-Bold.ttf' }
-    * { fill:none; stroke:white; size:20 }
-    text { font:main; fill:white; stroke:none }
-  ]]
+  }
 }
-style:valueConstants(color.predefined)
+
+-- load additional constants into the data model for resolution
+-- before parsing any CSS that might use them
+style:constants(color.predefined)
+
+style:add [[
+  @font-face { font-family:'main'; src:'Arial.ttf' }
+  @font-face { font-family:'bold'; src:'Arial-Bold.ttf' }
+  *    { fill:none; stroke:white; size:20 }
+  text { font:'main'; fill:white; stroke:none }
+]]
 
 style:load('my.css')
 --> my.css has the contents
 -->
---> @font-face { font-family:main; src:'DINPro-Light.ttf' }
---> @font-face { font-family:bold; src:'DINPro-Medium.ttf' }
---> #title { font:bold }
---> .important { fill:hsv(60,1,1) }
+--> @font-face      { font-family:'main'; src:'DINPro-Light.ttf' }
+--> @font-face      { font-family:'bold'; src:'DINPro-Medium.ttf' }
+--> #title          { font:'bold' }
+--> .important      { fill:hsv(60,1,1) }
 --> .debug, .boring { fill:white; opacity:0.2 }
---> text.debug, text.boring { opacity:0.5 }
---> *.danger { fill:rgb(2,0,0); opacity:1 }
---> text.negative { color:red }
---> *[speed>20] { effect:flash(0.5, 3) }
+--> text.debug,
+--> text.boring     { opacity:0.5 }
+--> text[@speed>20] { fill:red; opacity:1 }
 
-style:match{ type=line }
---> { fill=false, size=20, stroke=<color 'white'> }
+style:match{ type='line' }
+--> {fill=false, size=20, stroke=<color 'white'>}
 
 style:match'line'
---> { fill=false, size=20, stroke=<color 'white'> }
+--> {fill=false, size=20, stroke=<color 'white'>}
 
 style:match'text'
---> { fill=<color 'white'>, font='main', size=20, stroke=false }
+--> {fill=<color 'white'>, font="main", size=20, stroke=false}
 
 style:match'text.important'
---> { fill=<color r=1.0 g=1.0 b=0.0 a=1.0>, font='main', size=20, stroke=false }
+--> {fill={1, 1, 0}, font="main", size=20, stroke=false}
 
-style:match'#title.danger.important'
---> { fill=<color r=2.0 g=0.0 b=0.0 a=1.0>, font='bold', opacity=1, size=20,
--->   stroke=<color 'white'> }
+style:match'#title.important'
+--> {fill={1, 1, 0}, font="bold", size=20, stroke=<color 'white'>}
 
-style:match{ type=text, tags={debug=1}, data={speed=37} }
---> { effect={ func='flash', params={ 0.5, 3 }  },
--->   fill=<color 'white'>, opacity=0.2, size=20, stroke=<color 'white'> }
+style:match{ type='text', tags={debug=1}, data={speed=37} }
+--> {fill=<color 'red'>, font="main", opacity=1, size=20, stroke=false}
 ```
 
-## Descriptor Tables versus Strings
+# Descriptor Tables versus Strings
 
 As seen in the example above, you can describe an 'element' to find declarations for using either a table or a string. The two are equivalent in terms of _functionality_:
 
@@ -97,8 +133,8 @@ If you have elements whose tags or (notably) attribute values are constantly cha
 # API
 
 * [`ZSS:new()`](#zssnewopts) — create a style (aggregating many sheets and rules)
-* [`myZSS:constants()`](#myzssconstantsvalue_map) — set value replacements
-* [`myZSS:functions()`](#myzssfunctionshandler_map) — set function handlers
+* [`myZSS:constants()`](#myzssconstantsvalue_map) — set value lookups
+* [`myZSS:directives()`](#myzssdirectiveshandlers) — set at-rule handlers
 * [`myZSS:add()`](#myzssaddcss) — parse CSS from string
 * [`myZSS:load()`](#myzssload) — load CSS from file
 * [`myZSS:match()`](#myzssmatchelement_descriptor) — compute the declarations that apply to an element
@@ -111,83 +147,85 @@ If you have elements whose tags or (notably) attribute values are constantly cha
 
 `opts` is a table with any of the following string keys (all optional):
 
-* `constants` — a table mapping string literals (that might appear as values in declarations) to the Lua value you would like them to have instead.
-* `functions` — a table mapping string function names (that might appear as values in declarations) to a function that will process the argument(s) and return a Lua value to use.
+* `constants` — a table mapping string literals (that might appear as values or functions in declarations) to the Lua value you would like them to have instead.
 * `basecss` — a string of CSS rules to initially parse for the stylesheet.
+* `directives` — a table mapping the string name of an "at-rule" (without the `@`) to a function that should be invoked each time it is seen.
 * `files` — an array of string file names to load and parse after the `basecss`.
 
 ### Example:
 
 ```lua
-ZSS = require'zss'
+URL  = require'urlhandler'
+FONT = require'myfonts'
+ZSS  = require'zss'
 local style = ZSS:new{
-  values   = {none=false, ['true']=true, ['false']=false, transparent=processColor(0,0,0,0) },
-  handlers = {color=processColor, url=processURL },
+  constants  = {
+    none      = false,
+    ['true']  = true,
+    ['false'] = false,
+    color     = require('color'),
+    url       = URL.processURL,
+  },
+  directives = {
+    -- e.g. @font-face { font-family='bold'; src:'fonts/Arial-bold.ttf' }
+    ['font-face'] = function(style, props)
+      FONT.createFont(props['font-family'], props.src)
+    end
+  },
   basecss  = [[...css code...]],
   files    = {'a.css', 'b.css'},
 }
 ```
 
-Values can be set (replaced) later using the `values()` method.  
-Handlers can be updated (added to) later using the `handlers()` method.  
-You can parse additional raw CSS at any time using the `add()` method.  
-You can load CSS files by name at any time using the `load()` method.
+Constants can be added to later using the `constants()` method.  
+You can parse additional raw CSS later using the `add()` method.  
+You can load CSS files by name later using the `load()` method.  
+You can add additional directives later using the `handleDirectives()` method.
 
 
-## myZSS:values(value_map)
+## myZSS:constants(value_map)
 
 Add to the literal value mappings used when parsing declaration values.
 
-`value_map` is a table mapping string literals (that might appear as values in declarations) to the Lua value you would like them to have instead.
+`value_map` is a table mapping string literals (that might appear as values or functions in declarations) to the Lua value you would like them to have instead.
 
 The return value is the invoking ZSS stylesheet instance (for method chaining).
 
-**Note**: values are resolved when rules are added/loaded. Invoking this method after CSS has been loaded will only affect rules added/loaded after this calls.
+**Note**: constants are resolved when rules are added/loaded, unless there is a deferred reference in the value (e.g. `@foo`). Invoking this method after CSS has been loaded will only affect rules added/loaded after this calls, or the evaluation of deferred values.
 
 ### Example:
 
 ```lua
 local style = ZSS:new()
-style:values{ none=false, white={1,1,1}, red={1,0,0} }
+style:constants{ none=false, white={1,1,1}, red={1,0,0} }
 style:add('* {a:none; b:white; c:red; d:orange } ')
 style:match 'x'
---> { a=false, b={1,1,1}, c={1,0,0}, d='orange' }
+--> {a=false, b={1,1,1}, c={1,0,0}, d=nil}
 ```
 
+## myZSS:directives(handlers)
 
-## myZSS:handlers(handler_map)
+Add to the handler functions used when an at-rule is experienced during parsing.
 
-Add additional function mappings to the stylesheet. When a function matching a name in the map is encountered, it will be passed the values specified in the declaration, and the return value of the function used as the value of the rule.
-
-`handler_map` is a table mapping string function names (that might appear as values in declarations) to the Lua function to invoke.
+`handlers` is a table mapping the name of the at-rule (without the leading `@`) to a Lua function to invoke. The function will be passed a reference to the ZSS style instance, and a table mapping property names to values seen in the declaration.
 
 The return value is the invoking ZSS stylesheet instance (for method chaining).
-
-**Note**: values are resolved when a stylesheet is first loaded and parsed. Invoking this method after CSS has been loaded for a stylesheet will only affect any additional CSS that is loaded.
 
 ### Example:
 
 ```lua
-function lerpColors(c1, c2, pct)
-  local result={}
-  for i=1,3 do result[i] = c1[i]+(c2[i]-c1[i])*pct end
-  return result
-end
-
 local style = ZSS:new()
-style:values{ white={1,1,1}, red={1,0,0} }
-style:handlers{ blend=lerpColors }
-style:add'.step1 { fill:blend(red, white, 0.2) }'
-style:add'.step2 { fill:blurn(red) }'
-style:match{ tags={step1=1} }
---> { fill={ 1.0, 0.2, 0.2 } }
-style:match'.step2'
---> { fill={ func='blurn', params={ {1,0,0} } } }
+style:directives{
+  vars = function(me, props) me:constants(props) end
+}
+style:add[[
+  @vars { uiscale:1.5; fg:'white' }
+  text { font-size:12*uiscale; fill:fg }
+]]
+style:match 'text'
+--> { fill="white", ["font-size"]=18.0 }
 ```
 
-As seen above, values of parameters (`red` and `white` inside the `blend()` function) are resolved before to passing them to handlers.
-
-If a function is encountered that has no matching handler, a parsed table with the function name and parameter values is supplied as the value.
 
 ## myZSS:add(css)
 
