@@ -325,6 +325,16 @@ function test.matching_attr()
 	assertEqual(style:match('t[x=1]').op,              '<', '[@foo<42] works')
 end
 
+function test.parsing_functions()
+	local style = zss:new():constants{ x=function(t) return t end }:add[[
+		a, b[@x] {
+			res: x{ a=1, ['b']=2, [3]=3,
+              [false]=4 }
+		}
+	]]
+	assertTableEquals(style:match('a').res, {a=1, b=2, [3]=3, [false]=4})
+end
+
 function test.invalid_selectors()
 	local style = zss:new():add[[
 		t         { x:'OK' }
