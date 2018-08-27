@@ -353,4 +353,13 @@ function test.invalid_selectors()
 	assertEqual(style:match('t[x=1]').x, 'OK', 'invalid selectors must not be applied')
 end
 
+function test.expressions()
+	local bar = {}
+	function bar:jim(x) return x end
+	local style = zss:new():constants{bar=bar}:add "a { foo:bar:jim(1) } b { foo:bar:jim(2); too:bar:jim(3); } "
+	assertEqual(style:match('a').foo, 1)
+	assertEqual(style:match('b').foo, 2)
+	assertEqual(style:match('b').too, 3)
+end
+
 test{ quiet=true }
