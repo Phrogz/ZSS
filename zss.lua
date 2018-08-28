@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.9
+   ZSS v0.9.1
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.9", debug=print, info=print, warn=print, error=print }
+local ZSS = { VERSION="0.9.1", debug=print, info=print, warn=print, error=print }
 ZSS.__index = ZSS
 
 local updaterules
@@ -80,7 +80,7 @@ function ZSS:directives(handlermap)
 end
 
 -- Parse and evaluate values in declarations
-function ZSS:eval(str)
+function ZSS:eval(str, sheetid)
 	if str:find('@') then
 		local f,err = load('return '..str:gsub('@','_data_.'), nil, 't', self._env)
 		if not f then
@@ -91,14 +91,14 @@ function ZSS:eval(str)
 	else
 		local f,err = load('return '..str, nil, 't', self._constants)
 		if f then
-			local ok,res = pcall(f)
+			local ok,result = pcall(f)
 			if ok then
-				return res
+				return result
 			else
-				self.error('CSS error evaluating "'..str..'": '..res)
+				self.error(('Error when evaluating %s: %s'):format(sheetid, result))
 			end
 		else
-			self.error('CSS error compiling "'..str..'": '..err)
+			self.error(('Error compiling %s: %s'):format(sheetid, result))
 		end
 	end
 end
@@ -135,7 +135,7 @@ function ZSS:parse_selector(selector_str, from_data)
 				if not name or op~='=' then
 					self.warn(("ZSS ignoring invalid data assignment '%s' in item descriptor '%s'"):format(attr, selector_str))
 				else
-					selector.data[name] = self:eval(val)
+					selector.data[name] = self:eval(val, selector_str)
 				end
 			else
 				local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*([<=>])%s*(.-)$')
@@ -143,7 +143,7 @@ function ZSS:parse_selector(selector_str, from_data)
 					self.warn(("WARNING: invalid attribute selector '%s' in '%s'; must be like [@name < 42]"):format(attr, selector_str))
 					return nil
 				else
-					selector.data[name] = { op=op, value=self:eval(val) }
+					selector.data[name] = { op=op, value=self:eval(val, selector_str) }
 					table.insert(selector.data, name)
 				end
 			end
@@ -170,7 +170,7 @@ function ZSS:add(css, sheetid)
 		local decl_str = rule_str:match('[^{]*(%b{})'):sub(2,-2)
 		local declarations = {}
 		for key,val in decl_str:gmatch('([^%s:]+)%s*:%s*([^;]+)') do
-			declarations[key] = self:eval(val)
+			declarations[key] = self:eval(val, sheetid)
 		end
 
 		-- Create a unique rule for each selector in the rule
