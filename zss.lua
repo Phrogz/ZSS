@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.8.1
+   ZSS v0.8.2
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.8.1" }
+local ZSS = { VERSION="0.8.2" }
 ZSS.__index = ZSS
 
 local updaterules
@@ -169,7 +169,7 @@ function ZSS:add(css, sheetid)
 		-- Convert declarations into a table mapping property to value
 		local decl_str = rule_str:match('[^{]*(%b{})'):sub(2,-2)
 		local declarations = {}
-		for key,val in decl_str:gmatch('([^%s]+)%s*:%s*([^;]+)') do
+		for key,val in decl_str:gmatch('([^%s:]+)%s*:%s*([^;]+)') do
 			declarations[key] = self:eval(val)
 		end
 

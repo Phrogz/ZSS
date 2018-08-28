@@ -1,4 +1,5 @@
 package.path = '../?.lua;' .. package.path
+local print=print
 
 zss = require'zss'
 _ENV = require('lunity')('ZSS Tests')
@@ -337,29 +338,56 @@ end
 
 function test.invalid_selectors()
 	local style = zss:new():add[[
-		t         { x:'OK' }
+		t, t2     { x:'OK' }
 		t[5<@x]   { x:'no' }
 		t[5=@x]   { x:'no' }
 		t[5>@x]   { x:'no' }
 		t[true]   { x:'no' }
 		t[17]     { x:'no' }
 		t['@x<5'] { x:'no' }
-		!t!       { x:'no' }
-		!t        { x:'no' }
-		t!        { x:'no' }
+		!t2!      { x:'no' }
+		!t2       { x:'no' }
+		t2!       { x:'no' }
 	]]
-	assertEqual(style:match('t').x,      'OK', 'invalid selectors must not be applied')
-	assertEqual(style:match('t[x]').x,   'OK', 'invalid selectors must not be applied')
-	assertEqual(style:match('t[x=1]').x, 'OK', 'invalid selectors must not be applied')
+	assertEqual(style:match('t').x,      'OK', 'invalid selectors must not be applied (1)')
+	assertEqual(style:match('t[x]').x,   'OK', 'invalid selectors must not be applied (2)')
+	assertEqual(style:match('t[x=1]').x, 'OK', 'invalid selectors must not be applied (3)')
+	assertEqual(style:match('t2').x,     'OK', 'invalid selectors must not be applied (4)')
 end
 
-function test.expressions()
+function test.lua_expressions()
 	local bar = {}
 	function bar:jim(x) return x end
-	local style = zss:new():constants{bar=bar}:add "a { foo:bar:jim(1) } b { foo:bar:jim(2); too:bar:jim(3); } "
+	local style = zss:new():constants{bar=bar}:add [[
+		a { foo:bar:jim(1) }
+		b { foo:bar:jim(2); too: bar:jim(3); zoo:bar:jim(4); }
+		c { tbl: {
+					a=1,
+					b = "two",
+					c = bar:jim(5)
+			}}
+		d { tb2:bar:jim{d='{e}'}}
+		/* e { tb3:bar:jim{e='{e'}} */
+		/* f { tb4:bar:jim{e='e}'}} */
+	]]
 	assertEqual(style:match('a').foo, 1)
 	assertEqual(style:match('b').foo, 2)
 	assertEqual(style:match('b').too, 3)
+	assertEqual(style:match('b').zoo, 4)
+	assertTableEquals(style:match('c').tbl, {a=1, b="two", c=5})
+	assertTableEquals(style:match('d').tb2, {d='{e}'})
+	-- assertTableEquals(style:match('e').tb3, {d='{e'})
+	-- assertTableEquals(style:match('f').tb4, {d='e}'})
+end
+
+function test.sketchy_parser()
+	local style = zss:new():add [[
+		a { a:'}' }
+		b { b:';'; c:'c' }
+	]]
+	assertEqual(style:match('b').c, 'c')
+	assertEqual(style:match('a').a, '}')
+	assertEqual(style:match('b').b, ';')
 end
 
 test{ quiet=true }

@@ -50,7 +50,20 @@ ZSS is a small, simple, pure Lua library that parses simple CSS (see below for l
 * It assumes a **flat, unordered data model**. This means that there are no hierarchical selectors (no descendants, no children), no sibling selectors, and no pseudo-elements related to position.
 * Using Lua to parse property expressions means there is no support for custom units on numbers using CSS syntax, or hexadecimal colors. You would need to wrap these in function calls like `len(5,cm)` or `color('#ff0033')`.
 * It only supports simple data attribute queries in selectors: attribute presence (`[@foo]`), and simple value comparisons (`[@foo<7.3]`, `[@foo=12]`, `[@foo>0.9]`).
-* Due to a simple parser, you must not have a `{` character inside a selector. (Then again, when would you?)
+* Due to a simple parser:
+  * you must not have a `{` character inside a selector. (Then again, when would you?)
+  * you must not have a `;` character inside your declarations.
+  * you must not have an _unpaired_ `}` character inside your declarations.
+
+The following CSS is currently unparsable in many ways:
+
+```css
+foo[a='{'] { str:'nope'         } /* The { causes the selector to stop being parsed early       */
+baz        { no1:';'; ok:1      } /* The ; causes the declaration to stop being parsed too soon */
+bar        { no2:'}'            } /* The } causes the declaration to stop being parsed too soon */
+yay        { tbl:{ a={b='ok'} } } /* Having { and  } paired is OK, however                      */
+```
+
 
 
 ## Example Usage
