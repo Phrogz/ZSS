@@ -42,9 +42,9 @@ ZSS is a small, simple, pure Lua library that parses simple CSS (see below for l
 
 ## Simplifications/Limitations:
 
-* It assumes a **flat, unordered data model**. This means that there are no hierarchical selectors (no descendants, no children), no sibling selectors, and no pseudo-elements related to position.
+* ZSS assumes a **flat, unordered data model**. This means that there are no hierarchical selectors (no descendants, no children), no sibling selectors, and no pseudo-elements related to position.
 * Using Lua to parse property expressions means there is no support for custom units on numbers using CSS syntax, or hexadecimal colors. You would need to wrap these in function calls like `len(5,cm)` or `color('#ff0033')`.
-* It only supports simple data attribute queries in selectors: attribute presence (`[@foo]`), and simple value comparisons (`[@foo<7.3]`, `[@foo=12]`, `[@foo>0.9]`).
+* ZSS only supports simple data attribute queries in selectors: attribute presence (`[@foo]`), and simple value comparisons (`[@foo<7.3]`, `[@foo=12]`, `[@foo>0.9]`).
 * Due to a simple parser:
   * you must not have a `{` character inside a selector. (Then again, when would you?)
   * you must not have a `;` character inside your declarations.
@@ -145,7 +145,7 @@ If you have elements whose tags or (notably) attribute values are constantly cha
 * [`myZSS:add()`](#myzssaddcss) — parse CSS from string
 * [`myZSS:load()`](#myzssload) — load CSS from file
 * [`myZSS:match()`](#myzssmatchelement_descriptor) — compute the declarations that apply to an element
-* [`myZSS:extend()`](#myzssextend) — create a new sheet that derives from this one
+* [`myZSS:extend()`](#myzssextend) — create a new style that derives from this one
 * [`myZSS:disable()`](#myzssdisablesheetid) — stop using rules from a particular set of CSS
 * [`myZSS:enable()`](#myzssenablesheetid) — resume using rules from a particular set of CSS
 
@@ -155,9 +155,9 @@ If you have elements whose tags or (notably) attribute values are constantly cha
 `opts` is a table with any of the following string keys (all optional):
 
 * `constants` — a table mapping string literals (that might appear as values or functions in declarations) to the Lua value you would like them to have instead.
-* `basecss` — a string of CSS rules to initially parse for the stylesheet.
 * `directives` — a table mapping the string name of an "at-rule" (without the `@`) to a function that should be invoked each time it is seen.
-* `files` — an array of string file names to load and parse after the `basecss`.
+* `basecss` — a string of CSS rules to initially parse for the style.
+* `files` — an array of string file names to load and parse (after the `basecss`).
 
 ### Example:
 
@@ -185,20 +185,20 @@ local style = ZSS:new{
 ```
 
 Constants can be added to later using the `constants()` method.  
-You can parse additional raw CSS later using the `add()` method.  
-You can load CSS files by name later using the `load()` method.  
-You can add additional directives later using the `handleDirectives()` method.
+Additional directives can be added later using the `directives()` method.  
+Additional raw CSS can be parsed later using the `add()` method.  
+Additional CSS files can be loaded by name later using the `load()` method.
 
 
 ## myZSS:constants(value_map)
 
-Add to the literal value mappings used when parsing declaration values.
+Add key/value pairs to the literal value mappings used when parsing declaration values.
 
 `value_map` is a table mapping string literals (that might appear as values or functions in declarations) to the Lua value you would like them to have instead.
 
-The return value is the invoking ZSS stylesheet instance (for method chaining).
+The return value is the invoking ZSS style instance (for method chaining).
 
-**Note**: constants are resolved when rules are added/loaded, unless there is a deferred reference in the value (e.g. `@foo`). Invoking this method after CSS has been loaded will only affect rules added/loaded after this calls, or the evaluation of deferred values.
+**Note**: constants are resolved when rules are added/loaded, unless there is a deferred reference in the value (e.g. `@foo`). Invoking the `constants()` method after CSS has been loaded will only affect CSS added/loaded after the call…or the evaluation of deferred values.
 
 ### Example:
 
@@ -212,11 +212,11 @@ style:match 'x'
 
 ## myZSS:directives(handlers)
 
-Add to the handler functions used when an at-rule is experienced during parsing.
+Add to the handler functions used when an at-rule is encountered during parsing.
 
 `handlers` is a table mapping the name of the at-rule (without the leading `@`) to a Lua function to invoke. The function will be passed a reference to the ZSS style instance, and a table mapping property names to values seen in the declaration.
 
-The return value is the invoking ZSS stylesheet instance (for method chaining).
+The return value is the invoking ZSS style instance (for method chaining).
 
 ### Example:
 
@@ -240,7 +240,7 @@ Add CSS rules to the style (specified as a string of CSS).
 
 **Notes**:
 
-* You should invoke this method only after setting up any `values` and `handlers` mappings for the sheet.
+* You should invoke this method only after setting up any `values` and `handlers` mappings for the style.
 * Invoking this method resets the computed rules cache (as new rules may invalidate cached computations).
 
 ### Example:
@@ -257,19 +257,20 @@ style:add[[
 
 ## myZSS:load(...)
 
-Add CSS rules to the stylesheet, loaded from one or more files specified by file name.
+Add CSS rules to the style, loaded from one or more files specified by file name.
 
 ### Example:
 
 ```lua
 local style = ZSS:new()
+style:constants(myconstants)
 style:load('a.css', 'b.css', 'c.css')
 ```
 
 
 ## myZSS:match(element_descriptor)
 
-Use all rules in the stylesheet to compute the declarations that apply to described element.
+Use all rules in the style to compute the declarations that apply to described element.
 
 `element_descriptor` may be a selector-like string describing the element—e.g. `type.tag1.tag2`, `#someid[var1=42][var2=3.8]`—or a table using any/all/none of the keys: `{ type='mytype', id='myid', tags={tag1=1, tag2=1}, data={var1=42, var2=3.8}}`.
 
@@ -321,7 +322,7 @@ main:load('night.css')
 
 ## myZSS:disable(sheetid)
 
-Prevent a specific set of CSS from being used in the sheet (and all descendants created via `clone()`). For files, the `sheetid` is the path passed to `load()`; for CSS strings added via the `add()` method, the `sheetid` is the second string returned from `add()`.
+Prevent a specific set of CSS from being used in the style (and all descendants created via `clone()`). For files, the `sheetid` is the path passed to `load()`; for CSS strings added via the `add()` method, the `sheetid` is the second string returned from `add()`.
 
 ### Example:
 
@@ -348,7 +349,7 @@ style1:match() --> uses base.css and doc1a.css
 main:match() --> uses base.css and day.css
 ```
 
-**Note**: As shown in that last lines of the example above, a cloned sheet may disable rules loaded in its parent, but that does not disable them for the parent (or other clones of the parent).
+**Note**: As shown in the last lines of the example above, a cloned style may disable rules loaded in its parent; however, doing so does not disable them for the parent (or other clones of the parent).
 
 ## myZSS:enable(sheetid)
 
