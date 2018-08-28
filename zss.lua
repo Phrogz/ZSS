@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.9.1
+   ZSS v0.9.2
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.9.1", debug=print, info=print, warn=print, error=print }
+local ZSS = { VERSION="0.9.2", debug=print, info=print, warn=print, error=print }
 ZSS.__index = ZSS
 
 local updaterules
@@ -312,9 +312,7 @@ end
 function ZSS:sheetids()
 	local ids = self._parent and self._parent:sheetids() or {}
 	table.move(self._docs, 1, #self._docs, #ids+1, ids)
-	for sheetid,state in pairs(self._docs) do
-		ids[sheetid] = state
-	end
+	for _,id in ipairs(self._docs) do ids[id] = true end
 	return ids
 end
 
