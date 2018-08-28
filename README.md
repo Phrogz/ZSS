@@ -9,7 +9,7 @@ ZSS is a small, simple, pure Lua library that parses simple CSS (see below for l
 * It supports handlers to process "at-rules" as they are seen.
 * It uses arbitrary Lua expressions for property values, with a sandbox table for resolving values and functions.
   * _For example, you can make_ `{ fill:none }` _in CSS turn into_ `{fill=false}` _in Lua._
-  * _For example, you can make_ `{ fill:hsv(137°, 0.5, 2.7) }` _in CSS turn into_ `fill = {r=0, g=2.7, b=0.765}` _in Lua._
+  * _For example, you can make_ `{ fill:hsv(137, 0.5, 2.7) }` _in CSS turn into_ `fill = {r=0, g=2.7, b=0.765}` _in Lua._
 * Value expressions can use placeholder values that are deferred and resolved against data supplied with a query. For example:
     ```lua
     local C = require'color'
