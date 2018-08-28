@@ -1,7 +1,0 @@
-a#foo.bar.jim[cats][jam=42][ jim < 1 ][str = 'ok man'] { rank:lots }
-
-* { rank:none; star:true; }
-a { rank:low1; a1:true; }
-a { rank:low2; a2:true; }
-.bar { rank:med1; bar:true; }
-.a.b { rank:med2; dota:true; dotb:true; }

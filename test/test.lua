@@ -3,7 +3,6 @@ package.path = '../?.lua;' .. package.path
 zss = require'zss'
 ZSS = zss
 color = require'color'
-local lerp = require'lerp'
 
 local style = ZSS:new()
 style:constants{lerp=lerp}:directives{ vars = function(me, props) me:constants(props) end }
