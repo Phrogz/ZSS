@@ -1,7 +1,13 @@
 package.path = '../?.lua;' .. package.path
 local print=print
 
+local function devnull() end
 zss = require'zss'
+zss.debug = devnull
+zss.info  = devnull
+zss.warn  = devnull
+zss.error = devnull
+
 _ENV = require('lunity')('ZSS Tests')
 
 function test.load_two_sheets()
@@ -390,4 +396,4 @@ function test.sketchy_parser()
 	assertEqual(style:match('b').b, ';', 'should be able to parse declaration with ";" in it')
 end
 
-test{ squiet=true }
+test{ quiet=true }

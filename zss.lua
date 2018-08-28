@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.8.3
+   ZSS v0.9
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.8.3" }
+local ZSS = { VERSION="0.9", debug=print, info=print, warn=print, error=print }
 ZSS.__index = ZSS
 
 local updaterules
@@ -59,12 +59,12 @@ function ZSS:load(...)
 end
 
 function ZSS:valueFunctions(...)
-	print("ZSS:valueFunctions() is deprecated; use ZSS:constants() instead")
+	self.debug("ZSS:valueFunctions() is deprecated; use ZSS:constants() instead")
 	self:constants(...)
 end
 
 function ZSS:valueConstants(...)
-	print("ZSS:valueConstants() is deprecated; use ZSS:constants() instead")
+	self.debug("ZSS:valueConstants() is deprecated; use ZSS:constants() instead")
 	self:constants(...)
 end
 
@@ -84,7 +84,7 @@ function ZSS:eval(str)
 	if str:find('@') then
 		local f,err = load('return '..str:gsub('@','_data_.'), nil, 't', self._env)
 		if not f then
-			print(err)
+			self.error(err)
 		else
 			return {_zssfunc=f}
 		end
@@ -95,10 +95,10 @@ function ZSS:eval(str)
 			if ok then
 				return res
 			else
-				print('CSS error evaluating "'..str..'": '..res)
+				self.error('CSS error evaluating "'..str..'": '..res)
 			end
 		else
-			print('CSS error compiling "'..str..'": '..err)
+			self.error('CSS error compiling "'..str..'": '..err)
 		end
 	end
 end
@@ -133,14 +133,14 @@ function ZSS:parse_selector(selector_str, from_data)
 			elseif from_data then
 				local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*(=)%s*(.-)$')
 				if not name or op~='=' then
-					print(string.format("WARNING: ignoring invalid data assignment '%s' in item descriptor '%s'", attr, selector_str))
+					self.warn(("ZSS ignoring invalid data assignment '%s' in item descriptor '%s'"):format(attr, selector_str))
 				else
 					selector.data[name] = self:eval(val)
 				end
 			else
 				local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*([<=>])%s*(.-)$')
 				if not name then
-					print(string.format("WARNING: invalid attribute selector '%s' in '%s'; must be like [@name < 42]", attr, selector_str))
+					self.warn(("WARNING: invalid attribute selector '%s' in '%s'; must be like [@name < 42]"):format(attr, selector_str))
 					return nil
 				else
 					selector.data[name] = { op=op, value=self:eval(val) }
@@ -265,7 +265,7 @@ function ZSS:match(el)
 				if ok then
 					v=res
 				else
-					print('CSS error calculating "'..k..'": '..res)
+					self.error('CSS error calculating "'..k..'": '..res)
 					v=nil
 				end
 			end
@@ -326,8 +326,7 @@ function ZSS:disable(sheetid)
 	else
 		local quote='%q'
 		for i,id in ipairs(ids) do ids[i] = quote:format(id) end
-		print("WARNING: Cannot disable sheet with id '"..sheetid.."'; no such sheet loaded.")
-		print("Available sheet ids: "..table.concat(ids, ", "))
+		self.warn(("Cannot disable() CSS with id '%s' (no such sheet loaded).\nAvailable sheet ids: %s"):format(sheetid, table.concat(ids, ", ")))
 	end
 end
 
@@ -346,11 +345,10 @@ function ZSS:enable(sheetid)
 		for id,state in pairs(self._docs) do
 			if state==false then table.insert(disabled, quote:format(id)) end
 		end
-		print("WARNING: Cannot enable sheet with id '"..sheetid.."'; no such sheet disabled.")
 		if #disabled==0 then
-			print("No sheets disabled.")
+			self.warn(("Cannot enable() CSS with id '%s' (no sheets are disabled)."):format(sheetid))
 		else
-			print("Disabled sheet ids: "..table.concat(disabled, ", "))
+			self.warn(("Cannot enable() CSS with id '%s' (no such sheet disabled).\nDisabled ids: %s"):format(sheetid, table.concat(disabled, ", ")))
 		end
 	end
 end
