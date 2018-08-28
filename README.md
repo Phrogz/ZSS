@@ -238,7 +238,7 @@ Add CSS rules to the style (specified as a string of CSS).
 
 **Notes**:
 
-* You should invoke this method only after setting up any `values` and `handlers` mappings for the style.
+* You should invoke this method only after setting up any `constants` and `directives` mappings for the style.
 * Invoking this method resets the computed rules cache (as new rules may invalidate cached computations).
 
 ### Example:
@@ -251,6 +251,10 @@ style:add[[
   #special   { x:1; y:2.0; z:'three'; q:sum(1,2,1) }
 ]]
 ```
+
+The first return value is the invoking ZSS style instance (for method chaining).  
+
+The second return value is a unique identifier that may be used to later `disable()` and `enable()` the rules loaded in this CSS.
 
 
 ## myZSS:load(...)
