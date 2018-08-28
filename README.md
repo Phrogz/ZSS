@@ -163,13 +163,11 @@ If you have elements whose tags or (notably) attribute values are constantly cha
 
 ```lua
 URL  = require'urlhandler'
-FONT = require'myfonts'
+FONT = require'myfontlib'
 ZSS  = require'zss'
 local style = ZSS:new{
   constants  = {
     none      = false,
-    ['true']  = true,
-    ['false'] = false,
     color     = require('color'),
     url       = URL.processURL,
   },
