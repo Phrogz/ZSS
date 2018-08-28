@@ -24,24 +24,19 @@ ZSS is a small, simple, pure Lua library that parses simple CSS (see below for l
     ]]
 
     local props = style:match('circle')
-    for k,v in pairs(props) do print(k,v) end
-    --> fill <color 'white'>
-    --> radius 3
+    inspect(props)
+    --> { fill=<color 'white'>, radius=3 }
 
     local rnd=math.random
     for r=1,4 do
       local attrs = { r=r, hue=rnd(360) }
       local props = style:match{type='circle', data=attrs}
-      for k,v in pairs(props) do print(k,v) end
+      inspect(props)
     end
-    --> fill <color r=1.0 g=0.0 b=1.0 a=1.0>
-    --> radius 1
-    --> fill <color r=0.0 g=1.0 b=0.4 a=1.0>
-    --> radius 2
-    --> fill <color r=0.7 g=0.0 b=1.0 a=1.0>
-    --> radius 3
-    --> fill <color r=0.8 g=0.0 b=1.0 a=1.0>
-    --> radius 4
+    --> { fill=<color r=1.0 g=0.0 b=1.0 a=1.0>, radius=1 }
+    --> { fill=<color r=0.0 g=1.0 b=0.4 a=1.0>, radius=2 }
+    --> { fill=<color r=0.7 g=0.0 b=1.0 a=1.0>, radius=3 }
+    --> { fill=<color r=0.8 g=0.0 b=1.0 a=1.0>, radius=4 }
     ```
 
 
