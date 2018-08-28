@@ -1,17 +1,17 @@
 --[=========================================================================[
-   ZSS v0.8.2
+   ZSS v0.8.3
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.8.2" }
+local ZSS = { VERSION="0.8.3" }
 ZSS.__index = ZSS
 
 local updaterules
 
 -- ZSS:new{
---   constants  = { none=false, ['true']=true, ['false']=false, transparent=processColor(0,0,0,0), color=processColor },
+--   constants  = { none=false, transparent=processColor(0,0,0,0), color=processColor },
 --   directives = { ['font-face']=processFontFaceRule },
 --   basecss    = [[...css code...]],
 --   files      = { 'a.css', 'b.css' },
@@ -309,20 +309,50 @@ function ZSS:extend(...)
 	return kid
 end
 
+function ZSS:sheetids()
+	local ids = self._parent and self._parent:sheetids() or {}
+	table.move(self._docs, 1, #self._docs, #ids+1, ids)
+	for sheetid,state in pairs(self._docs) do
+		ids[sheetid] = state
+	end
+	return ids
+end
+
 function ZSS:disable(sheetid)
-	-- TODO: check if I, or any of my ancestors, have this sheet before disabling it
-	self._docs[sheetid] = false
-	updaterules(self)
+	local ids = self:sheetids()
+	if ids[sheetid] then
+		self._docs[sheetid] = false
+		updaterules(self)
+	else
+		local quote='%q'
+		for i,id in ipairs(ids) do ids[i] = quote:format(id) end
+		print("WARNING: Cannot disable sheet with id '"..sheetid.."'; no such sheet loaded.")
+		print("Available sheet ids: "..table.concat(ids, ", "))
+	end
 end
 
 function ZSS:enable(sheetid)
+
 	if self._rules[sheetid] then
 		self._docs[sheetid] = true
-	else
-		-- wipe out any override that might have been disabling an ancestor
+		updaterules(self)
+	elseif self._docs[sheetid]~=nil then
+		-- wipe out a local override that may have been disabling an ancestor
 		self._docs[sheetid] = nil
+		updaterules(self)
+	else
+		local disabled = {}
+		local quote='%q'
+		for id,state in pairs(self._docs) do
+			if state==false then table.insert(disabled, quote:format(id)) end
+		end
+		print("WARNING: Cannot enable sheet with id '"..sheetid.."'; no such sheet disabled.")
+		if #disabled==0 then
+			print("No sheets disabled.")
+		else
+			print("Disabled sheet ids: "..table.concat(disabled, ", "))
+		end
 	end
-	updaterules(self)
 end
 
 updaterules = function(self)

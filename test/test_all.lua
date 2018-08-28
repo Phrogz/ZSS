@@ -349,10 +349,10 @@ function test.invalid_selectors()
 		!t2       { x:'no' }
 		t2!       { x:'no' }
 	]]
-	assertEqual(style:match('t').x,      'OK', 'invalid selectors must not be applied (1)')
-	assertEqual(style:match('t[x]').x,   'OK', 'invalid selectors must not be applied (2)')
-	assertEqual(style:match('t[x=1]').x, 'OK', 'invalid selectors must not be applied (3)')
-	assertEqual(style:match('t2').x,     'OK', 'invalid selectors must not be applied (4)')
+	assertEqual(style:match('t').x,      'OK', 'invalid selectors should be ignored (1)')
+	assertEqual(style:match('t[x]').x,   'OK', 'invalid selectors should be ignored (2)')
+	assertEqual(style:match('t[x=1]').x, 'OK', 'invalid selectors should be ignored (3)')
+	assertEqual(style:match('t2').x,     'OK', 'invalid selectors should be ignored (4)')
 end
 
 function test.lua_expressions()
@@ -385,9 +385,9 @@ function test.sketchy_parser()
 		a { a:'}' }
 		b { b:';'; c:'c' }
 	]]
-	assertEqual(style:match('b').c, 'c')
-	assertEqual(style:match('a').a, '}')
-	assertEqual(style:match('b').b, ';')
+	assertEqual(style:match('b').c, 'c', 'should be able to parse declaration after ";" seen')
+	assertEqual(style:match('a').a, '}', 'should be able to parse declaration with "}" in it')
+	assertEqual(style:match('b').b, ';', 'should be able to parse declaration with ";" in it')
 end
 
-test{ quiet=true }
+test{ squiet=true }
