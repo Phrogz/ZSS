@@ -58,12 +58,11 @@ ZSS is a small, simple, pure Lua library that parses simple CSS (see below for l
 The following CSS is currently unparsable in many ways:
 
 ```css
-foo[a='{'] { str:'nope'         } /* The { causes the selector to stop being parsed early       */
-baz        { no1:';'; ok:1      } /* The ; causes the declaration to stop being parsed too soon */
-bar        { no2:'}'            } /* The } causes the declaration to stop being parsed too soon */
-yay        { tbl:{ a={b='ok'} } } /* Having { and  } paired is OK, however                      */
+boo[a='{'] { str:'nope'         } /* The { causes the selector to stop being parsed too soon    */
+boo2       { no1:';'; ok:1      } /* The ; causes the declaration to stop being parsed too soon */
+boo3       { no2:'}'            } /* The } causes the declaration to stop being parsed too soon */
+yay        { tbl:{ a={b='ok'} } } /* Having { and } paired is OK, however                       */
 ```
-
 
 
 ## Example Usage
