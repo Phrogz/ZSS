@@ -41,6 +41,11 @@ function test.extend_a_style()
 
 	local style3 = style1:extend('danger.css')
 	assertEqual(style3:match('.danger').size, 18, 'should be able to pass filenames to load to extend')
+
+	assertNil(style1.tmpSpecialName, 'ensure that we have a clean slate for the next test')
+	assertNil(style2.tmpSpecialName, 'ensure that we have a clean slate for the next test')
+	style1.tmpSpecialName = 42
+	assertEqual(style2.tmpSpecialName, 42, 'extended styles must inherit properties from the original')
 end
 
 function test.extensions_and_values()

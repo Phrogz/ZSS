@@ -1,12 +1,11 @@
 --[=========================================================================[
-   ZSS v0.9.2
+   ZSS v0.9.3
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.9.2", debug=print, info=print, warn=print, error=print }
-ZSS.__index = ZSS
+local ZSS = { VERSION="0.9.3", debug=print, info=print, warn=print, error=print }
 
 local updaterules
 
@@ -17,28 +16,28 @@ local updaterules
 --   files      = { 'a.css', 'b.css' },
 -- }
 function ZSS:new(opts)
-	local zss = {
+	local style = {
 		atrules     = {}, -- array of @font-face et. al, in document order; also indexed by rule name to array of declarations
 		_directives = {}, -- map from name of at rule (without @) to function to invoke
 		_constants  = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
 		_rules      = {}, -- map of doc ids to array of rule tables, each sorted by document order
 		_active     = {}, -- array of rule tables for active documents, sorted by specificity (rank)
 		_docs       = {}, -- array of document names, with each name mapped its active state
-		_computed   = {}, -- cached element signatures mapped to computed declarations
-		_kids       = setmetatable({},{__mode='k'}), -- set of child tables mapped to true
-		_parent     = nil, -- reference to the sheet that spawned this one
+		_computed   = {}, --setmetatable({},{__mode='kv'}), -- cached element signatures mapped to computed declarations
+		_kids       = setmetatable({},{__mode='k'}),  -- set of child tables mapped to true
+		_parent     = nil, -- reference to the style instance that spawned this one
 		_env        = {},  -- table that mutates and changes to evaluate functions
 	}
-	setmetatable(zss._env,{__index=zss._constants})
-	setmetatable(zss,ZSS)
+	setmetatable(style._env,{__index=style._constants})
+	setmetatable(style,{__index=self})
 	if opts then
-		if opts.constants  then zss:constants(opts.constants)      end
-		if opts.directives then zss:directives(opts.directives)    end
-		if opts.basecss    then zss:add(opts.basecss)              end
-		if opts.files      then zss:load(table.unpack(opts.files)) end
+		if opts.constants  then style:constants(opts.constants)      end
+		if opts.directives then style:directives(opts.directives)    end
+		if opts.basecss    then style:add(opts.basecss)              end
+		if opts.files      then style:load(table.unpack(opts.files)) end
 	end
-	updaterules(zss)
-	return zss
+	updaterules(style)
+	return style
 end
 
 -- Usage: myZSS:load( 'file1.css', 'file2.css', ... )
@@ -300,9 +299,10 @@ function ZSS.matches(selector, el)
 end
 
 function ZSS:extend(...)
-	local kid = ZSS:new()
+	local kid = self:new()
 	kid._parent = self
-	setmetatable(kid._constants,{__index=self._constants})
+	-- getmetatable(kid).__index = self
+	setmetatable(kid._constants, {__index=self._constants})
 	setmetatable(kid._directives,{__index=self._directives})
 	self._kids[kid] = true
 	kid:load(...)
