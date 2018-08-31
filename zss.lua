@@ -7,7 +7,7 @@
 
 local ZSS = { VERSION="0.9.3", debug=print, info=print, warn=print, error=print }
 
-local updaterules
+local updaterules, updateconstantschain
 
 -- ZSS:new{
 --   constants  = { none=false, transparent=processColor(0,0,0,0), color=processColor },
@@ -20,16 +20,17 @@ function ZSS:new(opts)
 		atrules     = {}, -- array of @font-face et. al, in document order; also indexed by rule name to array of declarations
 		_directives = {}, -- map from name of at rule (without @) to function to invoke
 		_constants  = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
+		_sheets     = {}, -- array of sheetids, also mapping sheetid to its active state
+		_sheetconst = {}, -- map of sheetid to table of constants for that sheet
+		_env        = {}, -- map of sheetid to table that mutates to evaluate functions
 		_rules      = {}, -- map of sheetids to array of rule tables, each sorted by document order
 		_active     = {}, -- array of rule tables for active sheets, sorted by specificity (rank)
-		_sheets     = {}, -- array of sheetids, with each name mapped its active state
 		_computed   = {}, --setmetatable({},{__mode='kv'}), -- cached element signatures mapped to computed declarations
 		_kids       = setmetatable({},{__mode='k'}),  -- set of child tables mapped to true
 		_parent     = nil, -- reference to the style instance that spawned this one
-		_sheetconst = {},  -- map of sheetid to table of constants for that sheet
-		_env        = {},  -- table that mutates and changes to evaluate functions
 	}
-	setmetatable(style._env,{__index=style._constants})
+	style._env[1] = setmetatable({},{__index=style._constants})
+	setmetatable(style._env,)
 	setmetatable(style,{__index=self})
 	if opts then
 		if opts.constants  then style:constants(opts.constants)      end
@@ -96,16 +97,27 @@ function ZSS:directives(handlermap)
 	return self
 end
 
--- Parse and evaluate values in declarations
-function ZSS:eval(str, sheetid)
-	local dynamic = str:find('@[%a_][%w_]*') or str:find('^%$')
-	local func,err = load('return '..str:gsub('@([%a_][%w_]*)','_data_.%1'):gsub('^%$',''), nil, 't', self._env)
+-- Parse values in declarations into functions that return the value
+function ZSS:compile(str, sheetid)
+	local dynamic = str:find('@[%a_][%w_]*') or str:find('^!')
+	local func,err = load('return '..str:gsub('@([%a_][%w_]*)','_data_.%1'):gsub('^!',''), nil, 't', self._env)
 	if not func then
 		self.error(('Error compiling %s: %s'):format(sheetid, err))
 	else
-		local value = {dynamic,func}
-		-- We will evaluate and cache the actual value for non-dynamic values on the first request
-		return {_zssfunc=f}
+		-- We will evaluate and cache the actual value for non-dynamic values in [4] on the first request
+		return {dynamic,func,sheetid,false,nil}
+	end
+end
+
+-- Parse values in declarations into functions that return the value
+function ZSS:eval(str, sheetid)
+	local dynamic = str:find('@[%a_][%w_]*') or str:find('^!')
+	local func,err = load('return '..str:gsub('@([%a_][%w_]*)','_data_.%1'):gsub('^!',''), nil, 't', self._env)
+	if not func then
+		self.error(('Error compiling %s: %s'):format(sheetid, err))
+	else
+		-- We will evaluate and cache the actual value for non-dynamic values in [4] on the first request
+		return {dynamic,func,false}
 	end
 end
 
@@ -167,8 +179,8 @@ function ZSS:add(css, sheetid)
 	sheetid = sheetid or 'loaded css #'..(self._parent and #self._parent._sheets or 0) + #self._sheets + 1
 	table.insert(self._sheets, sheetid)
 	self._sheets[sheetid] = true
-	local docrules = {}
-	self._rules[sheetid] = docrules
+	self._rules[sheetid] = {}
+	self._env[sheetid]
 
 	for rule_str in css:gsub('/%*.-%*/',''):gmatch('[^%s][^{]+%b{}') do
 
@@ -199,7 +211,7 @@ function ZSS:add(css, sheetid)
 						0 -- the document order will be determined during updaterules()
 					}
 					local rule = {selector=selector, declarations=declarations, doc=sheetid}
-					table.insert(docrules, rule)
+					table.insert(self._rules[sheetid], rule)
 				end
 			end
 		end

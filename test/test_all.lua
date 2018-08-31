@@ -405,7 +405,7 @@ function test.per_sheet_constants()
 	local s = zss:new()
 	local _,id1 = s:add[[
 		@vars  { a:1; b:2 }
-		sheet1 { a:a; b:b; c:c; d:$d; e:$e }
+		sheet1 { a:a; b:b; c:c; d:!d; e:!e }
 		@vars  { c:3; d:4 }
 	]]
 	assertEqual(s:match('sheet1').a, 1,   '@vars should add variables as constants')
@@ -417,7 +417,7 @@ function test.per_sheet_constants()
 
 	local _,id2 = s:add[[
 		@vars  { b:20; c:30; d:d and d+1 or 'fresh'; e:50 }
-		sheet2 { a:a; b:b; c:c; d:$d; e:$e }
+		sheet2 { a:a; b:b; c:c; d:!d; e:!e }
 	]]
 	assertEqual(s:match('sheet1').b, 2,   'static declarations using @vars are not affected by loading a later sheet')
 	assertEqual(s:match('sheet1').d, 4,   'dynamic declarations in earlier sheet do NOT access constants in later sheets')
@@ -430,7 +430,7 @@ function test.per_sheet_constants()
 	assertEqual(s:match('sheet2').e, 50)
 
 	local _,id3 = s:add[[
-		sheet3 { a:a; b:b; c:c; d:$d; e:$e }
+		sheet3 { a:a; b:b; c:c; d:!d; e:!e }
 	]]
 	assertEqual(s:match('sheet3').a, 1,  'declarations have access to constants from previously-loaded sheets')
 	assertEqual(s:match('sheet3').b, 20, 'declarations have access to constants from previously-loaded sheets')
