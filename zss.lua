@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.9.3
+   ZSS v0.10
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.9.3", debug=print, info=print, warn=print, error=print }
+local ZSS = { VERSION="0.10", debug=print, info=print, warn=print, error=print }
 
 local updaterules
 
@@ -17,7 +17,6 @@ local updaterules
 -- }
 function ZSS:new(opts)
 	local style = {
-		atrules     = {}, -- array of @font-face et. al, in document order; also indexed by rule name to array of declarations
 		_directives = {}, -- map from name of at rule (without @) to function to invoke
 		_constants  = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
 		_rules      = {}, -- map of doc ids to array of rule tables, each sorted by document order
@@ -105,66 +104,64 @@ end
 -- Convert a selector string into its component pieces;
 -- from_data=true parses an element descriptor (skips some steps)
 function ZSS:parse_selector(selector_str, from_data)
-	if selector_str:match('^@[%a_][%w_-]*$') then
-		return {directive=selector_str}
-	else
-		local selector = {
-			type = selector_str:match('^[%a_][%w_-]*'),
-			id  = selector_str:match('#([%a_][%w_-]*)'),
-			tags={}, data={}
-		}
+	local selector = {
+		type = selector_str:match('^@?[%a_][%w_-]*'),
+		id  = selector_str:match('#([%a_][%w_-]*)'),
+		tags={}, data={}
+	}
 
-		-- Find all the tags
-		for name in selector_str:gmatch('%.([%a_][%w_-]*)') do
-			selector.tags[name] = true
-			if not from_data then
-				selector.tags[#selector.tags+1] = name
-			end
+	-- Find all the tags
+	for name in selector_str:gmatch('%.([%a_][%w_-]*)') do
+		selector.tags[name] = true
+		if not from_data then
+			selector.tags[#selector.tags+1] = name
 		end
-		if not from_data then table.sort(selector.tags) end
-
-		-- Find all attribute sections, e.g. [@attr], [@attr<17], [attr=12], …
-		for attr in selector_str:gmatch('%[%s*(.-)%s*%]') do
-			local attr_name_only = attr:match('^@?([%a_][%w_-]*)$')
-			if attr_name_only then
-				selector.data[attr_name_only] = true
-				if not from_data then table.insert(selector.data, attr_name_only) end
-			elseif from_data then
-				local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*(=)%s*(.-)$')
-				if not name or op~='=' then
-					self.warn(("ZSS ignoring invalid data assignment '%s' in item descriptor '%s'"):format(attr, selector_str))
-				else
-					selector.data[name] = self:eval(val, selector_str)
-				end
-			else
-				local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*([<=>])%s*(.-)$')
-				if not name then
-					self.warn(("WARNING: invalid attribute selector '%s' in '%s'; must be like [@name < 42]"):format(attr, selector_str))
-					return nil
-				else
-					selector.data[name] = { op=op, value=self:eval(val, selector_str) }
-					table.insert(selector.data, name)
-				end
-			end
-		end
-
-		if not from_data then table.sort(selector.data) end
-
-		return selector
 	end
+	if not from_data then table.sort(selector.tags) end
+
+	-- Find all attribute sections, e.g. [@attr], [@attr<17], [attr=12], …
+	for attr in selector_str:gmatch('%[%s*(.-)%s*%]') do
+		local attr_name_only = attr:match('^@?([%a_][%w_-]*)$')
+		if attr_name_only then
+			selector.data[attr_name_only] = true
+			if not from_data then table.insert(selector.data, attr_name_only) end
+		elseif from_data then
+			local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*(=)%s*(.-)$')
+			if not name or op~='=' then
+				self.warn(("ZSS ignoring invalid data assignment '%s' in item descriptor '%s'"):format(attr, selector_str))
+			else
+				selector.data[name] = self:eval(val, selector_str)
+			end
+		else
+			local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*([<=>])%s*(.-)$')
+			if not name then
+				self.warn(("WARNING: invalid attribute selector '%s' in '%s'; must be like [@name < 42]"):format(attr, selector_str))
+				return nil
+			else
+				selector.data[name] = { op=op, value=self:eval(val, selector_str) }
+				table.insert(selector.data, name)
+			end
+		end
+	end
+
+	if not from_data then table.sort(selector.data) end
+
+	return selector
 end
 
 -- Add a block of raw CSS rules (as a single string) to the style sheet
 -- Returns the sheet itself (for chaining) and id associated with the css (for later enable/disable)
 function ZSS:add(css, sheetid)
 	sheetid = sheetid or 'loaded css #'..(self._parent and #self._parent._docs or 0) + #self._docs + 1
-	table.insert(self._docs, sheetid)
-	self._docs[sheetid] = true
-	local docrules = {}
-	self._rules[sheetid] = docrules
+
+	local newsheet = not self._rules[sheetid]
+	if newsheet then
+		table.insert(self._docs, sheetid)
+		self._docs[sheetid] = true
+	end
+	self._rules[sheetid] = {}
 
 	for rule_str in css:gsub('/%*.-%*/',''):gmatch('[^%s][^{]+%b{}') do
-
 		-- Convert declarations into a table mapping property to value
 		local decl_str = rule_str:match('[^{]*(%b{})'):sub(2,-2)
 		local declarations = {}
@@ -175,25 +172,22 @@ function ZSS:add(css, sheetid)
 		-- Create a unique rule for each selector in the rule
 		local selectors_str = rule_str:match('(.-)%s*{')
 		for selector_str in selectors_str:gmatch('%s*([^,]+)') do
+
+			local directive = selector_str:match('^%s*@([%a_][%w_-]*)%s*$')
+			if directive and self._directives[directive] then
+				self._directives[directive](self, declarations)
+			end
+
 			local selector = self:parse_selector(selector_str:match "^%s*(.-)%s*$")
 			if selector then
-				if selector.directive then
-					selector.declarations = declarations
-					table.insert(self.atrules, selector)
-					self.atrules[selector.directive] = self.atrules[selector.directive] or {}
-					table.insert(self.atrules[selector.directive], declarations)
-					local handler = self._directives[string.sub(selector.directive,2)]
-					if handler then handler(self, declarations) end
-				else
-					selector.rank = {
-						selector.id and 1 or 0,
-						#selector.tags + #selector.data,
-						selector.type and 1 or 0,
-						0 -- the document order will be determined during updaterules()
-					}
-					local rule = {selector=selector, declarations=declarations, doc=sheetid}
-					table.insert(docrules, rule)
-				end
+				selector.rank = {
+					selector.id and 1 or 0,
+					#selector.tags + #selector.data,
+					selector.type and 1 or 0,
+					0 -- the document order will be determined during updaterules()
+				}
+				local rule = {selector=selector, declarations=declarations, doc=sheetid}
+				table.insert(self._rules[sheetid], rule)
 			end
 		end
 	end
