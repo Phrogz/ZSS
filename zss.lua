@@ -20,12 +20,13 @@ function ZSS:new(opts)
 		atrules     = {}, -- array of @font-face et. al, in document order; also indexed by rule name to array of declarations
 		_directives = {}, -- map from name of at rule (without @) to function to invoke
 		_constants  = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
-		_rules      = {}, -- map of doc ids to array of rule tables, each sorted by document order
-		_active     = {}, -- array of rule tables for active documents, sorted by specificity (rank)
-		_docs       = {}, -- array of document names, with each name mapped its active state
+		_rules      = {}, -- map of sheetids to array of rule tables, each sorted by document order
+		_active     = {}, -- array of rule tables for active sheets, sorted by specificity (rank)
+		_sheets     = {}, -- array of sheetids, with each name mapped its active state
 		_computed   = {}, --setmetatable({},{__mode='kv'}), -- cached element signatures mapped to computed declarations
 		_kids       = setmetatable({},{__mode='k'}),  -- set of child tables mapped to true
 		_parent     = nil, -- reference to the style instance that spawned this one
+		_sheetconst = {},  -- map of sheetid to table of constants for that sheet
 		_env        = {},  -- table that mutates and changes to evaluate functions
 	}
 	setmetatable(style._env,{__index=style._constants})
@@ -36,6 +37,33 @@ function ZSS:new(opts)
 		if opts.basecss    then style:add(opts.basecss)              end
 		if opts.files      then style:load(table.unpack(opts.files)) end
 	end
+
+	style:directives{
+		-- Process @vars { foo:42 } with sheet ordering and chaining
+		vars = function(self, declarations, sheetid)
+			local consts = self._sheetconst[sheetid]
+			if not consts then
+				local priorconst
+				if self._sheets[1]==sheetid then
+					priorconst = self._constants
+				else
+					for i,id in ipairs(self._sheets) do
+						if id==sheetid then
+							priorconst = self._sheetconst[self._sheets[i-1]]
+							break
+						end
+					end
+				end
+				consts = setmetatable({},{__index=priorconst})
+				getmetatable(self._env).__index = consts
+				self._sheetconst[sheetid] = consts
+			end
+			for k,v in pairs(declarations) do
+				consts[k] = v
+			end
+		end
+	}
+
 	updaterules(style)
 	return style
 end
@@ -57,16 +85,6 @@ function ZSS:load(...)
 	return self
 end
 
-function ZSS:valueFunctions(...)
-	self.debug("ZSS:valueFunctions() is deprecated; use ZSS:constants() instead")
-	self:constants(...)
-end
-
-function ZSS:valueConstants(...)
-	self.debug("ZSS:valueConstants() is deprecated; use ZSS:constants() instead")
-	self:constants(...)
-end
-
 -- Usage: myZSS:mapValues{ none=false, transparent=Color(0,0,0,0), rgba=color.makeRGBA }
 function ZSS:constants(valuemap)
 	for k,v in pairs(valuemap) do self._constants[k]=v end
@@ -80,25 +98,14 @@ end
 
 -- Parse and evaluate values in declarations
 function ZSS:eval(str, sheetid)
-	if str:find('@') then
-		local f,err = load('return '..str:gsub('@','_data_.'), nil, 't', self._env)
-		if not f then
-			self.error(err)
-		else
-			return {_zssfunc=f}
-		end
+	local dynamic = str:find('@[%a_][%w_]*') or str:find('^%$')
+	local func,err = load('return '..str:gsub('@([%a_][%w_]*)','_data_.%1'):gsub('^%$',''), nil, 't', self._env)
+	if not func then
+		self.error(('Error compiling %s: %s'):format(sheetid, err))
 	else
-		local f,err = load('return '..str, nil, 't', self._constants)
-		if f then
-			local ok,result = pcall(f)
-			if ok then
-				return result
-			else
-				self.error(('Error when evaluating %s: %s'):format(sheetid, result))
-			end
-		else
-			self.error(('Error compiling %s: %s'):format(sheetid, result))
-		end
+		local value = {dynamic,func}
+		-- We will evaluate and cache the actual value for non-dynamic values on the first request
+		return {_zssfunc=f}
 	end
 end
 
@@ -157,9 +164,9 @@ end
 -- Add a block of raw CSS rules (as a single string) to the style sheet
 -- Returns the sheet itself (for chaining) and id associated with the css (for later enable/disable)
 function ZSS:add(css, sheetid)
-	sheetid = sheetid or 'loaded css #'..(self._parent and #self._parent._docs or 0) + #self._docs + 1
-	table.insert(self._docs, sheetid)
-	self._docs[sheetid] = true
+	sheetid = sheetid or 'loaded css #'..(self._parent and #self._parent._sheets or 0) + #self._sheets + 1
+	table.insert(self._sheets, sheetid)
+	self._sheets[sheetid] = true
 	local docrules = {}
 	self._rules[sheetid] = docrules
 
@@ -183,7 +190,7 @@ function ZSS:add(css, sheetid)
 					self.atrules[selector.directive] = self.atrules[selector.directive] or {}
 					table.insert(self.atrules[selector.directive], declarations)
 					local handler = self._directives[string.sub(selector.directive,2)]
-					if handler then handler(self, declarations) end
+					if handler then handler(self, declarations, sheetid) end
 				else
 					selector.rank = {
 						selector.id and 1 or 0,
@@ -311,15 +318,15 @@ end
 
 function ZSS:sheetids()
 	local ids = self._parent and self._parent:sheetids() or {}
-	table.move(self._docs, 1, #self._docs, #ids+1, ids)
-	for _,id in ipairs(self._docs) do ids[id] = true end
+	table.move(self._sheets, 1, #self._sheets, #ids+1, ids)
+	for _,id in ipairs(self._sheets) do ids[id] = true end
 	return ids
 end
 
 function ZSS:disable(sheetid)
 	local ids = self:sheetids()
 	if ids[sheetid] then
-		self._docs[sheetid] = false
+		self._sheets[sheetid] = false
 		updaterules(self)
 	else
 		local quote='%q'
@@ -331,16 +338,16 @@ end
 function ZSS:enable(sheetid)
 
 	if self._rules[sheetid] then
-		self._docs[sheetid] = true
+		self._sheets[sheetid] = true
 		updaterules(self)
-	elseif self._docs[sheetid]~=nil then
+	elseif self._sheets[sheetid]~=nil then
 		-- wipe out a local override that may have been disabling an ancestor
-		self._docs[sheetid] = nil
+		self._sheets[sheetid] = nil
 		updaterules(self)
 	else
 		local disabled = {}
 		local quote='%q'
-		for id,state in pairs(self._docs) do
+		for id,state in pairs(self._sheets) do
 			if state==false then table.insert(disabled, quote:format(id)) end
 		end
 		if #disabled==0 then
@@ -360,15 +367,15 @@ updaterules = function(self)
 	if self._parent then
 		for i,rule in ipairs(self._parent._active) do
 			-- do not use parent's active if we overrode it
-			if self._docs[rule.doc]~=false then
+			if self._sheets[rule.doc]~=false then
 				table.insert(self._active, rule)
 			end
 		end
 	end
 
 	-- add all the rules from the active documents
-	for _,sheetid in ipairs(self._docs) do
-		if self._docs[sheetid] then
+	for _,sheetid in ipairs(self._sheets) do
+		if self._sheets[sheetid] then
 			for _,rule in ipairs(self._rules[sheetid]) do
 				table.insert(self._active, rule)
 				rule.selector.rank[4] = #self._active
