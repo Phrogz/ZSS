@@ -99,18 +99,18 @@ function test.disable_ancestor_sheet_in_self()
 	assertEqual(style2:match('b').b, 1)
 end
 
-function test.at_rules()
-	local style = zss:new():add[[
-		@foo-bar { a:1; b:2 }
-		@jim-jam { a:2; b:3 }
-		@foo-bar { a:4; b:5 }
-	]]
-	assertNotNil(style.atrules)
-	assertNotNil(style.atrules['@foo-bar'])
-	assertEqual(#style.atrules['@foo-bar'], 2)
-	assertEqual(style.atrules['@foo-bar'][1].a, 1)
-	assertEqual(style.atrules['@foo-bar'][2].a, 4)
-end
+-- function test.at_rules()
+-- 	local style = zss:new():add[[
+-- 		@foo-bar { a:1; b:2 }
+-- 		@jim-jam { a:2; b:3 }
+-- 		@foo-bar { a:4; b:5 }
+-- 	]]
+-- 	assertNotNil(style.atrules)
+-- 	assertNotNil(style.atrules['@foo-bar'])
+-- 	assertEqual(#style.atrules['@foo-bar'], 2)
+-- 	assertEqual(style.atrules['@foo-bar'][1].a, 1)
+-- 	assertEqual(style.atrules['@foo-bar'][2].a, 4)
+-- end
 
 function test.directives()
 	local style = zss:new()
@@ -230,7 +230,7 @@ function test.functions_with_placeholders()
 	assertEqual(style:match({type='y', data={r=4}}).p2, 21, 'new values produce new results')
 	assertEqual(style:match('y[r=4]').p2, 21, 'new values produce new results')
 
-	assertEqual(ct1,                   1, 'parsing the rules invokes non-placeholder functions')
+	-- assertEqual(ct1,                   1), 'parsing the rules invokes non-placeholder functions')
 	assertEqual(style:match('ct1').p5, 1, 'non-placholder functions do not get re-invoked')
 	assertEqual(ct1,                   1, 'non-placholder functions do not get re-invoked')
 
@@ -410,14 +410,13 @@ function test.per_sheet_constants()
 	]]
 	assertEqual(s:match('sheet1').a, 1,   '@vars should add variables as constants')
 	assertEqual(s:match('sheet1').b, 2,   '@vars should add variables as constants')
-	-- I'm not sure if this is desired or an implementation side effect; temporarily removing as undefined behavior
-	assertEqual(s:match('sheet1').c, nil, 'static declaration before @vars does not see the vars initially')
+	assertEqual(s:match('sheet1').c, 3,   'static declaration before @vars still sees the vars on initial read')
 	assertEqual(s:match('sheet1').d, 4,   'dynamic declaration before @vars works')
 	assertEqual(s:match('sheet1').e, nil, 'dynamic declaration cleanly fails for missing @vars')
 
 	local _,id2 = s:add[[
-		@vars  { b:20; c:30; d:d and d+1 or 'fresh'; e:50 }
-		sheet2 { a:a; b:b; c:c; d:!d; e:!e }
+		@vars  { b:20; c:30; q:d and d+1 or 'fresh'; e:50 }
+		sheet2 { a:a; b:b; c:c; q:!q; e:!e }
 	]]
 	assertEqual(s:match('sheet1').b, 2,   'static declarations using @vars are not affected by loading a later sheet')
 	assertEqual(s:match('sheet1').d, 4,   'dynamic declarations in earlier sheet do NOT access constants in later sheets')
@@ -426,30 +425,33 @@ function test.per_sheet_constants()
 	assertEqual(s:match('sheet2').a, 1,   'static declarations can read constants from earlier sheets')
 	assertEqual(s:match('sheet2').b, 20,  'new static declarations can read new constants')
 	assertEqual(s:match('sheet2').c, 30,  'new static declarations can read new constants')
-	assertEqual(s:match('sheet2').d, 5,   '@vars can read values from previously-loaded sheets')
+	assertEqual(s:match('sheet2').q, 5,   '@vars can read values from previously-loaded sheets')
 	assertEqual(s:match('sheet2').e, 50)
 
 	local _,id3 = s:add[[
-		sheet3 { a:a; b:b; c:c; d:!d; e:!e }
+		sheet3 { a:a; b:b; c:c; d:!d; e:!e; q:q }
 	]]
 	assertEqual(s:match('sheet3').a, 1,  'declarations have access to constants from previously-loaded sheets')
 	assertEqual(s:match('sheet3').b, 20, 'declarations have access to constants from previously-loaded sheets')
 	assertEqual(s:match('sheet3').c, 30, 'declarations have access to constants from previously-loaded sheets')
-	assertEqual(s:match('sheet3').d, 5,  'declarations have access to constants from previously-loaded sheets')
+	assertEqual(s:match('sheet3').d, 4,  'declarations have access to constants from previously-loaded sheets')
 	assertEqual(s:match('sheet3').e, 50, 'declarations have access to constants from previously-loaded sheets')
+	assertEqual(s:match('sheet3').q, 5,  'declarations have access to constants from previously-loaded sheets')
 
 	s:disable(id1)
 	assertTableEmpty(s:match('sheet1'),       'disabling a sheet removes its rules')
+	assertEqual(s:match('sheet2').a, nil)
 	assertEqual(s:match('sheet2').a, nil,     'disabling a sheet prevents access to the constants from that sheet, and forces reevaluation of static declarations')
 	assertEqual(s:match('sheet2').b, 20,      'constants are still visible')
 	assertEqual(s:match('sheet2').c, 30,      'constants are still visible')
-	assertEqual(s:match('sheet2').d, 'fresh', 'constants are re-evaluated when an earlier sheet is disabled')
+	assertEqual(s:match('sheet2').q, 'fresh')
+	assertEqual(s:match('sheet2').q, 'fresh', 'constants are re-evaluated when an earlier sheet is disabled')
 	assertEqual(s:match('sheet2').e, 50)
 
 	assertEqual(s:match('sheet3').a, nil,     'disabling a sheet prevents access to the constants from that sheet, and forces reevaluation of static declarations')
 	assertEqual(s:match('sheet3').b, 20,      'inherited constants are still visible')
 	assertEqual(s:match('sheet3').c, 30,      'inherited constants are still visible')
-	assertEqual(s:match('sheet3').d, 'fresh', 'inherited constants are still visible')
+	assertEqual(s:match('sheet3').q, 'fresh', 'inherited constants are still visible')
 	assertEqual(s:match('sheet3').e, 50,      'inherited constants are still visible')
 
 	s:enable(id1)
@@ -457,15 +459,38 @@ function test.per_sheet_constants()
 
 	assertEqual(s:match('sheet1').a, 1,   're-enabling a sheet allows vars to work')
 	assertEqual(s:match('sheet1').b, 2,   're-enabling a sheet allows vars to work')
-	assertEqual(s:match('sheet1').c, nil, 're-enabling a sheet does not re-evaluate its own declarations against constants')
+	assertEqual(s:match('sheet1').c, 3,   're-enabling a sheet still evaluates correctly')
 	assertEqual(s:match('sheet1').d, 4,   're-enabling a sheet allows dynamic declarations to work')
 	assertEqual(s:match('sheet1').e, nil, 're-enabling a sheet still does not allow access to constants in later sheets')
 
 	assertEqual(s:match('sheet3').a, 1,   'disabling a sheet prevents access to the constants from that sheet, and forces reevaluation of static declarations')
 	assertEqual(s:match('sheet3').b, 2,   'inherited constants are still visible')
-	assertEqual(s:match('sheet3').c, nil, 'inherited constants are still visible')
+	assertEqual(s:match('sheet3').c, 3,   'inherited constants are still visible')
 	assertEqual(s:match('sheet3').d, 4,   'inherited constants are still visible')
 	assertEqual(s:match('sheet3').e, nil, 'inherited constants are still visible')
+end
+
+function test.function_call_parse()
+	local s = zss:new():constants{
+		echo = function(t) return t end
+	}:add[[
+		s1 { a:1; b:2; t:echo{'abc', x=1, y=2, z=3, s='more'} }
+		s2 { t:echo{'abc', x=1, y=2, z=3, s='more'}; a:1; b:2}
+		s4 {
+			a: 1;
+			t: echo{'abc', x=1, y=2, z=3, s='more'};
+			b: 2;
+		}
+		s3 { a:1;
+			t: echo{'abc', x=1, y=2, z=3, s='more'}
+			; b:2
+		}
+	]]
+	local expected = {a=1, b=2, t={'abc', x=1, y=2, z=3, s='more'}}
+	assertTableEquals(s:match('s1'), expected)
+	assertTableEquals(s:match('s2'), expected)
+	assertTableEquals(s:match('s3'), expected)
+	assertTableEquals(s:match('s4'), expected)
 end
 
 test{ quiet=true }

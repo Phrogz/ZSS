@@ -7,7 +7,7 @@
 
 local ZSS = { VERSION="0.9.3", debug=print, info=print, warn=print, error=print }
 
-local updaterules, updateconstantschain
+local updaterules, updateconstantschain, dirtyblocks
 
 -- ZSS:new{
 --   constants  = { none=false, transparent=processColor(0,0,0,0), color=processColor },
@@ -22,15 +22,15 @@ function ZSS:new(opts)
 		_constants  = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
 		_sheets     = {}, -- array of sheetids, also mapping sheetid to its active state
 		_sheetconst = {}, -- map of sheetid to table of constants for that sheet
-		_env        = {}, -- map of sheetid to table that mutates to evaluate functions
+		_sheetblox  = {}, -- map of sheetid to table of blocks underlying the constants
+		_envs       = {}, -- map of sheetid to table that mutates to evaluate functions
 		_rules      = {}, -- map of sheetids to array of rule tables, each sorted by document order
 		_active     = {}, -- array of rule tables for active sheets, sorted by specificity (rank)
 		_computed   = {}, --setmetatable({},{__mode='kv'}), -- cached element signatures mapped to computed declarations
 		_kids       = setmetatable({},{__mode='k'}),  -- set of child tables mapped to true
 		_parent     = nil, -- reference to the style instance that spawned this one
 	}
-	style._env[1] = setmetatable({},{__index=style._constants})
-	setmetatable(style._env,)
+	style._envs[1] = setmetatable({},{__index=style._constants})
 	setmetatable(style,{__index=self})
 	if opts then
 		if opts.constants  then style:constants(opts.constants)      end
@@ -41,26 +41,16 @@ function ZSS:new(opts)
 
 	style:directives{
 		-- Process @vars { foo:42 } with sheet ordering and chaining
-		vars = function(self, declarations, sheetid)
+		vars = function(self, values, sheetid, declarations)
 			local consts = self._sheetconst[sheetid]
-			if not consts then
-				local priorconst
-				if self._sheets[1]==sheetid then
-					priorconst = self._constants
-				else
-					for i,id in ipairs(self._sheets) do
-						if id==sheetid then
-							priorconst = self._sheetconst[self._sheets[i-1]]
-							break
-						end
-					end
-				end
-				consts = setmetatable({},{__index=priorconst})
-				getmetatable(self._env).__index = consts
-				self._sheetconst[sheetid] = consts
+			local blox = self._sheetblox[sheetid]
+			if not blox then
+				blox = {}
+				self._sheetblox[sheetid] = blox
 			end
-			for k,v in pairs(declarations) do
+			for k,v in pairs(values) do
 				consts[k] = v
+				blox[k] = declarations[k]
 			end
 		end
 	}
@@ -86,7 +76,7 @@ function ZSS:load(...)
 	return self
 end
 
--- Usage: myZSS:mapValues{ none=false, transparent=Color(0,0,0,0), rgba=color.makeRGBA }
+-- Usage: myZSS:constants{ none=false, transparent=color(0,0,0,0), rgba=color.makeRGBA }
 function ZSS:constants(valuemap)
 	for k,v in pairs(valuemap) do self._constants[k]=v end
 	return self
@@ -97,33 +87,44 @@ function ZSS:directives(handlermap)
 	return self
 end
 
--- Parse values in declarations into functions that return the value
-function ZSS:compile(str, sheetid)
+-- Turn Lua code into function blocks that return the value
+function ZSS:compile(str, sheetid, property)
 	local dynamic = str:find('@[%a_][%w_]*') or str:find('^!')
-	local func,err = load('return '..str:gsub('@([%a_][%w_]*)','_data_.%1'):gsub('^!',''), nil, 't', self._env)
+	local env = self._envs[sheetid] or self._envs[1]
+	local func,err = load('return '..str:gsub('@([%a_][%w_]*)','_data_.%1'):gsub('^!',''), nil, 't', env)
 	if not func then
-		self.error(('Error compiling %s: %s'):format(sheetid, err))
+		self.error(('Error compiling %s: %s'):format(str, err))
 	else
-		-- We will evaluate and cache the actual value for non-dynamic values in [4] on the first request
-		return {dynamic,func,sheetid,false,nil}
+		-- [1] will hold the actual cached value (deferred until the first request)
+		-- [2] is whether or not a cached value exists in [1] (needed in case the computed value is nil)
+		-- [3] is the environment of the function (cached for convenient lookup)
+		-- [4] is the function that produces the value
+		-- [5] indicates if the block must be computed each time, or may be cached
+		-- [6] is the sheetid (used for evaluation error messages)
+		-- [7] is the name of the property being evaluated (used for evaluation error messages)
+		return {nil,false,env,func,dynamic,sheetid,property,str}
 	end
 end
 
--- Parse values in declarations into functions that return the value
-function ZSS:eval(str, sheetid)
-	local dynamic = str:find('@[%a_][%w_]*') or str:find('^!')
-	local func,err = load('return '..str:gsub('@([%a_][%w_]*)','_data_.%1'):gsub('^!',''), nil, 't', self._env)
-	if not func then
-		self.error(('Error compiling %s: %s'):format(sheetid, err))
+-- Compute the value for a block
+function ZSS:eval(block, data, ignorecache)
+	if block[2] and not ignorecache then return block[1] end
+	block[3]._data_ = data -- may be nil; important to clear out from previous eval
+	local ok,valOrError = pcall(block[4])
+	if ok then
+		if not block[5] then
+			block[2]=true
+			block[1]=valOrError
+		end
+		return valOrError
 	else
-		-- We will evaluate and cache the actual value for non-dynamic values in [4] on the first request
-		return {dynamic,func,false}
+		self.error(("Error evaluating `%s` CSS value for '%s' in '%s': %s"):format(block[8], block[7], block[6], valOrError))
 	end
 end
 
 -- Convert a selector string into its component pieces;
--- from_data=true parses an element descriptor (skips some steps)
-function ZSS:parse_selector(selector_str, from_data)
+-- descriptor=true parses an element descriptor (skips some steps)
+function ZSS:parse_selector(selector_str, sheetid, descriptor)
 	if selector_str:match('^@[%a_][%w_-]*$') then
 		return {directive=selector_str}
 	else
@@ -136,24 +137,24 @@ function ZSS:parse_selector(selector_str, from_data)
 		-- Find all the tags
 		for name in selector_str:gmatch('%.([%a_][%w_-]*)') do
 			selector.tags[name] = true
-			if not from_data then
+			if not descriptor then
 				selector.tags[#selector.tags+1] = name
 			end
 		end
-		if not from_data then table.sort(selector.tags) end
+		if not descriptor then table.sort(selector.tags) end
 
 		-- Find all attribute sections, e.g. [@attr], [@attr<17], [attr=12], …
 		for attr in selector_str:gmatch('%[%s*(.-)%s*%]') do
 			local attr_name_only = attr:match('^@?([%a_][%w_-]*)$')
 			if attr_name_only then
 				selector.data[attr_name_only] = true
-				if not from_data then table.insert(selector.data, attr_name_only) end
-			elseif from_data then
+				if not descriptor then table.insert(selector.data, attr_name_only) end
+			elseif descriptor then
 				local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*(=)%s*(.-)$')
 				if not name or op~='=' then
 					self.warn(("ZSS ignoring invalid data assignment '%s' in item descriptor '%s'"):format(attr, selector_str))
 				else
-					selector.data[name] = self:eval(val, selector_str)
+					selector.data[name] = self:eval(self:compile(val, sheetid, selector_str))
 				end
 			else
 				local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*([<=>])%s*(.-)$')
@@ -161,13 +162,13 @@ function ZSS:parse_selector(selector_str, from_data)
 					self.warn(("WARNING: invalid attribute selector '%s' in '%s'; must be like [@name < 42]"):format(attr, selector_str))
 					return nil
 				else
-					selector.data[name] = { op=op, value=self:eval(val, selector_str) }
+					selector.data[name] = { op=op, value=self:eval(self:compile(val, sheetid, selector_str)) }
 					table.insert(selector.data, name)
 				end
 			end
 		end
 
-		if not from_data then table.sort(selector.data) end
+		if not descriptor then table.sort(selector.data) end
 
 		return selector
 	end
@@ -176,11 +177,20 @@ end
 -- Add a block of raw CSS rules (as a single string) to the style sheet
 -- Returns the sheet itself (for chaining) and id associated with the css (for later enable/disable)
 function ZSS:add(css, sheetid)
-	sheetid = sheetid or 'loaded css #'..(self._parent and #self._parent._sheets or 0) + #self._sheets + 1
+	sheetid = sheetid or 'css#'..(#self:sheetids()+1)
 	table.insert(self._sheets, sheetid)
 	self._sheets[sheetid] = true
 	self._rules[sheetid] = {}
-	self._env[sheetid]
+	self._sheetconst[sheetid] = setmetatable({},{__index=self._constants})
+	self._envs[sheetid] = setmetatable({},{__index=self._sheetconst[sheetid]})
+
+	-- inherit from the last active sheet in the chain
+	for i=#self._sheets-1,1,-1 do
+		if self._sheets[self._sheets[i]] then
+			getmetatable(self._sheetconst[sheetid]).__index = self._sheetconst[self._sheets[i]]
+			break
+		end
+	end
 
 	for rule_str in css:gsub('/%*.-%*/',''):gmatch('[^%s][^{]+%b{}') do
 
@@ -188,13 +198,13 @@ function ZSS:add(css, sheetid)
 		local decl_str = rule_str:match('[^{]*(%b{})'):sub(2,-2)
 		local declarations = {}
 		for key,val in decl_str:gmatch('([^%s:]+)%s*:%s*([^;]+)') do
-			declarations[key] = self:eval(val, sheetid)
+			declarations[key] = self:compile(val, sheetid, key)
 		end
 
 		-- Create a unique rule for each selector in the rule
 		local selectors_str = rule_str:match('(.-)%s*{')
 		for selector_str in selectors_str:gmatch('%s*([^,]+)') do
-			local selector = self:parse_selector(selector_str:match "^%s*(.-)%s*$")
+			local selector = self:parse_selector(selector_str:match "^%s*(.-)%s*$", sheetid)
 			if selector then
 				if selector.directive then
 					selector.declarations = declarations
@@ -202,7 +212,12 @@ function ZSS:add(css, sheetid)
 					self.atrules[selector.directive] = self.atrules[selector.directive] or {}
 					table.insert(self.atrules[selector.directive], declarations)
 					local handler = self._directives[string.sub(selector.directive,2)]
-					if handler then handler(self, declarations, sheetid) end
+					if handler then
+						-- bake value blocks into values before handing off
+						local values = {}
+						for k,block in pairs(declarations) do values[k] = self:eval(block) end
+						handler(self, values, sheetid, declarations)
+					end
 				else
 					selector.rank = {
 						selector.id and 1 or 0,
@@ -218,7 +233,9 @@ function ZSS:add(css, sheetid)
 	end
 
 	-- sort rules and determine active based on rank
-	if not self._deferupdate then updaterules(self) end
+	if not self._deferupdate then
+		updaterules(self)
+	end
 
 	return self, sheetid
 end
@@ -241,10 +258,10 @@ function ZSS:match(el)
 		descriptor = el
 		local compdata = self._computed[descriptor]
 		if compdata then
-			computed,placeholders,data = compdata[1],compdata[2],compdata[3]
+			computed,data = compdata[1],compdata[2]
 		else
 			-- We didn't have one saved, so we need to parse the descriptor to an element table
-			el = self:parse_selector(descriptor, true)
+			el = self:parse_selector(descriptor, false, true)
 			data = el.data
 		end
 	end
@@ -253,46 +270,25 @@ function ZSS:match(el)
 		computed = {}
 		for _,rule in ipairs(self._active) do
 			if ZSS.matches(rule.selector, el) then
-				for k,v in pairs(rule.declarations) do
-					computed[k] = v
+				for k,block in pairs(rule.declarations) do
+					computed[k] = block
 				end
-			end
-		end
-		for prop,value in pairs(computed) do
-			if type(value)=='table' and value._zssfunc then
-				if not placeholders then
-					placeholders = {}
-				end
-				placeholders[prop] = value._zssfunc
 			end
 		end
 	end
 
 	-- Cache the rules, placeholders, and environment if a string was used as the `el` descriptor
 	if descriptor and not self._computed[descriptor] then
-		self._computed[descriptor] = {computed,placeholders,data}
+		self._computed[descriptor] = {computed,data}
 	end
 
-	-- If some of the values are code that needs to be evaluated, do so
-	if placeholders then
-		local result = {}
-		self._env._data_ = data or el.data or {}
-		for k,v in pairs(computed) do
-			if placeholders[k] then
-				local ok,res = pcall(v._zssfunc)
-				if ok then
-					v=res
-				else
-					self.error('CSS error calculating "'..k..'": '..res)
-					v=nil
-				end
-			end
-			result[k] = v
-		end
-		return result
-	else
-		return computed
+	-- Convert blocks to values (honoring cached values)
+	local result = {}
+	local data = data or el.data or {}
+	for k,block in pairs(computed) do
+		result[k] = self:eval(block,data)
 	end
+	return result
 end
 
 -- Test to see if an element descriptor table matches a specific selector table
@@ -323,6 +319,7 @@ function ZSS:extend(...)
 	-- getmetatable(kid).__index = self
 	setmetatable(kid._constants, {__index=self._constants})
 	setmetatable(kid._directives,{__index=self._directives})
+	setmetatable(kid._envs,{__index=self._envs})
 	self._kids[kid] = true
 	kid:load(...)
 	return kid
@@ -340,6 +337,8 @@ function ZSS:disable(sheetid)
 	if ids[sheetid] then
 		self._sheets[sheetid] = false
 		updaterules(self)
+		updateconstantschain(self)
+		dirtyblocks(self,sheetid)
 	else
 		local quote='%q'
 		for i,id in ipairs(ids) do ids[i] = quote:format(id) end
@@ -348,7 +347,6 @@ function ZSS:disable(sheetid)
 end
 
 function ZSS:enable(sheetid)
-
 	if self._rules[sheetid] then
 		self._sheets[sheetid] = true
 		updaterules(self)
@@ -409,6 +407,36 @@ updaterules = function(self)
 	for kid,_ in pairs(self._kids) do
 		updaterules(kid)
 	end
+end
+
+updateconstantschain = function(self)
+	local lastactive = self._constants
+	for _,sheetid in ipairs(self._sheets) do
+		-- If the sheet is active, put it into the chain
+		if self._sheets[sheetid] then
+			local sheetconst = self._sheetconst[sheetid]
+			getmetatable(sheetconst).__index = lastactive
+			lastactive = sheetconst
+		end
+	end
+end
+
+dirtyblocks = function(self, sheetid)
+	local dirty = not sheetid
+	for _,id in ipairs(self._sheets) do
+		if id==sheetid then dirty=true end
+		if dirty then
+			for _,rule in ipairs(self._rules[id]) do
+				for k,block in pairs(rule.declarations) do block[2]=false end
+			end
+			if self._sheetblox[id] then
+				for k,block in pairs(self._sheetblox[id]) do
+					self._sheetconst[id][k] = self:eval(block,nil,true)
+				end
+			end
+		end
+	end
+	for kid,_ in pairs(self._kids) do dirtyblocks(kid) end
 end
 
 return ZSS
