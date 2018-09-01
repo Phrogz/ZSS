@@ -99,18 +99,13 @@ function test.disable_ancestor_sheet_in_self()
 	assertEqual(style2:match('b').b, 1)
 end
 
--- function test.at_rules()
--- 	local style = zss:new():add[[
--- 		@foo-bar { a:1; b:2 }
--- 		@jim-jam { a:2; b:3 }
--- 		@foo-bar { a:4; b:5 }
--- 	]]
--- 	assertNotNil(style.atrules)
--- 	assertNotNil(style.atrules['@foo-bar'])
--- 	assertEqual(#style.atrules['@foo-bar'], 2)
--- 	assertEqual(style.atrules['@foo-bar'][1].a, 1)
--- 	assertEqual(style.atrules['@foo-bar'][2].a, 4)
--- end
+function test.at_rules()
+	local style = zss:new():add[[
+		@foo-bar { a:1 }
+	]]
+	assertEqual(style:match('@foo-bar').a, 1)
+	assertNil(  style:match('bork').a, 'atrules must not be mistaken for * selectors')
+end
 
 function test.directives()
 	local style = zss:new()

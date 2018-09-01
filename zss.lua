@@ -17,7 +17,6 @@ local updaterules, updateconstantschain, dirtyblocks
 -- }
 function ZSS:new(opts)
 	local style = {
-		atrules     = {}, -- array of @font-face et. al, in document order; also indexed by rule name to array of declarations
 		_directives = {}, -- map from name of at rule (without @) to function to invoke
 		_constants  = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
 		_sheets     = {}, -- array of sheetids, also mapping sheetid to its active state
@@ -125,75 +124,71 @@ end
 -- Convert a selector string into its component pieces;
 -- descriptor=true parses an element descriptor (skips some steps)
 function ZSS:parse_selector(selector_str, sheetid, descriptor)
-	if selector_str:match('^@[%a_][%w_-]*$') then
-		return {directive=selector_str}
-	else
-		local selector = {
-			type = selector_str:match('^[%a_][%w_-]*'),
-			id  = selector_str:match('#([%a_][%w_-]*)'),
-			tags={}, data={}
-		}
+	local selector = {
+		type = selector_str:match('^@?[%a_][%w_-]*'),
+		id  = selector_str:match('#([%a_][%w_-]*)'),
+		tags={}, data={}
+	}
 
-		-- Find all the tags
-		for name in selector_str:gmatch('%.([%a_][%w_-]*)') do
-			selector.tags[name] = true
-			if not descriptor then
-				selector.tags[#selector.tags+1] = name
-			end
-		end
-		if not descriptor then table.sort(selector.tags) end
-
-		-- Find all attribute sections, e.g. [@attr], [@attr<17], [attr=12], …
-		for attr in selector_str:gmatch('%[%s*(.-)%s*%]') do
-			local attr_name_only = attr:match('^@?([%a_][%w_-]*)$')
-			if attr_name_only then
-				selector.data[attr_name_only] = true
-				if not descriptor then table.insert(selector.data, attr_name_only) end
-			elseif descriptor then
-				local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*(=)%s*(.-)$')
-				if not name or op~='=' then
-					self.warn(("ZSS ignoring invalid data assignment '%s' in item descriptor '%s'"):format(attr, selector_str))
-				else
-					selector.data[name] = self:eval(self:compile(val, sheetid, selector_str))
-				end
-			else
-				local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*([<=>])%s*(.-)$')
-				if not name then
-					self.warn(("WARNING: invalid attribute selector '%s' in '%s'; must be like [@name < 42]"):format(attr, selector_str))
-					return nil
-				else
-					selector.data[name] = { op=op, value=self:eval(self:compile(val, sheetid, selector_str)) }
-					table.insert(selector.data, name)
-				end
-			end
-		end
-
-		if not descriptor then table.sort(selector.data) end
-
-		return selector
+	-- Find all the tags
+	for name in selector_str:gmatch('%.([%a_][%w_-]*)') do
+		selector.tags[name] = true
+		if not descriptor then selector.tags[#selector.tags+1] = name end
 	end
+	if not descriptor then table.sort(selector.tags) end
+
+	-- Find all attribute sections, e.g. [@attr], [@attr<17], [attr=12], …
+	for attr in selector_str:gmatch('%[%s*(.-)%s*%]') do
+		local attr_name_only = attr:match('^@?([%a_][%w_-]*)$')
+		if attr_name_only then
+			selector.data[attr_name_only] = true
+			if not descriptor then table.insert(selector.data, attr_name_only) end
+		elseif descriptor then
+			local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*(=)%s*(.-)$')
+			if not name or op~='=' then
+				self.warn(("ZSS ignoring invalid data assignment '%s' in item descriptor '%s'"):format(attr, selector_str))
+			else
+				selector.data[name] = self:eval(self:compile(val, sheetid, selector_str))
+			end
+		else
+			local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*([<=>])%s*(.-)$')
+			if not name then
+				self.warn(("WARNING: invalid attribute selector '%s' in '%s'; must be like [@name < 42]"):format(attr, selector_str))
+				return nil
+			else
+				selector.data[name] = { op=op, value=self:eval(self:compile(val, sheetid, selector_str)) }
+				table.insert(selector.data, name)
+			end
+		end
+	end
+
+	if not descriptor then table.sort(selector.data) end
+
+	return selector
 end
 
 -- Add a block of raw CSS rules (as a single string) to the style sheet
 -- Returns the sheet itself (for chaining) and id associated with the css (for later enable/disable)
 function ZSS:add(css, sheetid)
 	sheetid = sheetid or 'css#'..(#self:sheetids()+1)
-	table.insert(self._sheets, sheetid)
-	self._sheets[sheetid] = true
-	self._rules[sheetid] = {}
-	self._sheetconst[sheetid] = setmetatable({},{__index=self._constants})
-	self._envs[sheetid] = setmetatable({},{__index=self._sheetconst[sheetid]})
 
-	-- inherit from the last active sheet in the chain
-	for i=#self._sheets-1,1,-1 do
-		if self._sheets[self._sheets[i]] then
-			getmetatable(self._sheetconst[sheetid]).__index = self._sheetconst[self._sheets[i]]
-			break
+	local newsheet = not self._rules[sheetid]
+	if newsheet then
+		table.insert(self._sheets, sheetid)
+		self._sheets[sheetid] = true
+		self._sheetconst[sheetid] = setmetatable({},{__index=self._constants})
+		self._envs[sheetid] = setmetatable({},{__index=self._sheetconst[sheetid]})
+		-- inherit from the last active sheet in the chain
+		for i=#self._sheets-1,1,-1 do
+			if self._sheets[self._sheets[i]] then
+				getmetatable(self._sheetconst[sheetid]).__index = self._sheetconst[self._sheets[i]]
+				break
+			end
 		end
 	end
+	self._rules[sheetid] = {}
 
 	for rule_str in css:gsub('/%*.-%*/',''):gmatch('[^%s][^{]+%b{}') do
-
 		-- Convert declarations into a table mapping property to value
 		local decl_str = rule_str:match('[^{]*(%b{})'):sub(2,-2)
 		local declarations = {}
@@ -204,30 +199,25 @@ function ZSS:add(css, sheetid)
 		-- Create a unique rule for each selector in the rule
 		local selectors_str = rule_str:match('(.-)%s*{')
 		for selector_str in selectors_str:gmatch('%s*([^,]+)') do
+			-- Check if this is an at-rule that needs processing
+			local atrule = selector_str:match('^%s*@([%a_][%w_-]*)%s*$')
+			if atrule and self._directives[atrule] then
+				-- bake value blocks into values before handing off
+				local values = {}
+				for k,block in pairs(declarations) do values[k] = self:eval(block) end
+				self._directives[atrule](self, values, sheetid, declarations)
+			end
+
 			local selector = self:parse_selector(selector_str:match "^%s*(.-)%s*$", sheetid)
 			if selector then
-				if selector.directive then
-					selector.declarations = declarations
-					table.insert(self.atrules, selector)
-					self.atrules[selector.directive] = self.atrules[selector.directive] or {}
-					table.insert(self.atrules[selector.directive], declarations)
-					local handler = self._directives[string.sub(selector.directive,2)]
-					if handler then
-						-- bake value blocks into values before handing off
-						local values = {}
-						for k,block in pairs(declarations) do values[k] = self:eval(block) end
-						handler(self, values, sheetid, declarations)
-					end
-				else
-					selector.rank = {
-						selector.id and 1 or 0,
-						#selector.tags + #selector.data,
-						selector.type and 1 or 0,
-						0 -- the document order will be determined during updaterules()
-					}
-					local rule = {selector=selector, declarations=declarations, doc=sheetid}
-					table.insert(self._rules[sheetid], rule)
-				end
+				selector.rank = {
+					selector.id and 1 or 0,
+					#selector.tags + #selector.data,
+					selector.type and 1 or 0,
+					0 -- the document order will be determined during updaterules()
+				}
+				local rule = {selector=selector, declarations=declarations, doc=sheetid}
+				table.insert(self._rules[sheetid], rule)
 			end
 		end
 	end
