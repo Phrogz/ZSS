@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.11
+   ZSS v0.11.1
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.11", debug=print, info=print, warn=print, error=print }
+local ZSS = { VERSION="0.11.1", debug=print, info=print, warn=print, error=print }
 
 local updaterules, updateconstantschain, dirtyblocks
 
@@ -90,9 +90,9 @@ end
 function ZSS:compile(str, sheetid, property)
 	local dynamic = str:find('@[%a_][%w_]*') or str:find('^!')
 	local env = self._envs[sheetid] or self._envs[1]
-	local func,err = load('return '..str:gsub('@([%a_][%w_]*)','_data_.%1'):gsub('^!',''), nil, 't', env)
+	local func,err = load('return '..str:gsub('@([%a_][%w_]*)','_data_.%1'):gsub('^!',''), str, 't', env)
 	if not func then
-		self.error(('Error compiling %s: %s'):format(str, err))
+		self.error(("Error compiling CSS value for '%s' in '%s': %s"):format(property, sheetid, err))
 	else
 		-- [1] will hold the actual cached value (deferred until the first request)
 		-- [2] is whether or not a cached value exists in [1] (needed in case the computed value is nil)
@@ -101,7 +101,7 @@ function ZSS:compile(str, sheetid, property)
 		-- [5] indicates if the block must be computed each time, or may be cached
 		-- [6] is the sheetid (used for evaluation error messages)
 		-- [7] is the name of the property being evaluated (used for evaluation error messages)
-		return {nil,false,env,func,dynamic,sheetid,property,str}
+		return {nil,false,env,func,dynamic,sheetid,property}
 	end
 end
 
@@ -117,7 +117,7 @@ function ZSS:eval(block, data, ignorecache)
 		end
 		return valOrError
 	else
-		self.error(("Error evaluating `%s` CSS value for '%s' in '%s': %s"):format(block[8], block[7], block[6], valOrError))
+		self.error(("Error evaluating CSS value for '%s' in '%s': %s"):format(block[7], block[6], valOrError))
 	end
 end
 
