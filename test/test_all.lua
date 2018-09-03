@@ -392,8 +392,8 @@ function test.sketchy_parser()
 		b { b:';'; c:'c' }
 	]]
 	assertEqual(style:match('b').c, 'c', 'should be able to parse declaration after ";" seen')
-	assertEqual(style:match('a').a, '}', 'should be able to parse declaration with "}" in it')
-	assertEqual(style:match('b').b, ';', 'should be able to parse declaration with ";" in it')
+	assertEqual(style:match('a').a, '}', 'should be able to parse declaration with "}" in string')
+	assertEqual(style:match('b').b, ';', 'should be able to parse declaration with ";" in string')
 end
 
 function test.per_sheet_constants()
@@ -463,6 +463,13 @@ function test.per_sheet_constants()
 	assertEqual(s:match('sheet3').c, 3,   'inherited constants are still visible')
 	assertEqual(s:match('sheet3').d, 4,   'inherited constants are still visible')
 	assertEqual(s:match('sheet3').e, nil, 'inherited constants are still visible')
+
+	local css = "@vars {cats:42} house {cats:cats; veryfine:true}"
+	local s1 = zss:new():add(css)
+	assertTableEquals(s1:match('house'), {cats=42, veryfine=true}, 'Adding CSS through add() can read per-sheet constants')
+
+	local s2 = zss:new{basecss=css}
+	assertTableEquals(s2:match('house'), {cats=42, veryfine=true}, 'Adding CSS through basecss can read per-sheet constants')
 end
 
 function test.function_call_parse()

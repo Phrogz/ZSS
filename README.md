@@ -219,16 +219,17 @@ The return value is the invoking ZSS style instance (for method chaining).
 ### Example:
 
 ```lua
+local myfontlib = require'somefontlib'
 local style = ZSS:new()
 style:directives{
-  vars = function(me, props) me:constants(props) end
+  font = function(me, props)
+    me:constants{ [props.name]=myfontlib.loadFont(props.src) }
+  end
 }
 style:add[[
-  @vars { uiscale:1.5; fg:'white' }
-  text { font-size:12*uiscale; fill:fg }
+  @font { name:'mainFont'; src:'my.ttf' }
+  text { font:mainFont }
 ]]
-style:match 'text'
---> { fill="white", ["font-size"]=18.0 }
 ```
 
 
@@ -324,7 +325,7 @@ main:load('night.css')
 
 ## myZSS:disable(sheetid)
 
-Prevent a specific set of CSS from being used in the style (and all descendants created via `clone()`). For files, the `sheetid` is the path passed to `load()`; for CSS strings added via the `add()` method, the `sheetid` is the second string returned from `add()`.
+Prevent a specific set of CSS from being used in the style (and all descendants created via `clone()`). For files, the `sheetid` is the path passed to `load()`; for CSS strings added via the `add()` method, the `sheetid` is the second string returned from `add()`. For css added using the `basecss` option to `new()`, use the string `"basecss"`.
 
 ### Example:
 

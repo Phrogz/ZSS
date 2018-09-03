@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.11.1
+   ZSS v0.11.2
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.11.1", debug=print, info=print, warn=print, error=print }
+local ZSS = { VERSION="0.11.2", debug=print, info=print, warn=print, error=print }
 
 local updaterules, updateconstantschain, dirtyblocks
 
@@ -31,13 +31,6 @@ function ZSS:new(opts)
 	}
 	style._envs[1] = setmetatable({},{__index=style._constants})
 	setmetatable(style,{__index=self})
-	if opts then
-		if opts.constants  then style:constants(opts.constants)      end
-		if opts.directives then style:directives(opts.directives)    end
-		if opts.basecss    then style:add(opts.basecss)              end
-		if opts.files      then style:load(table.unpack(opts.files)) end
-	end
-
 	style:directives{
 		-- Process @vars { foo:42 } with sheet ordering and chaining
 		vars = function(self, values, sheetid, declarations)
@@ -53,6 +46,13 @@ function ZSS:new(opts)
 			end
 		end
 	}
+
+	if opts then
+		if opts.constants  then style:constants(opts.constants)      end
+		if opts.directives then style:directives(opts.directives)    end
+		if opts.basecss    then style:add(opts.basecss, 'basecss')   end
+		if opts.files      then style:load(table.unpack(opts.files)) end
+	end
 
 	updaterules(style)
 	return style
