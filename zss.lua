@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.11.2
+   ZSS v0.11.3
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.11.2", debug=print, info=print, warn=print, error=print }
+local ZSS = { VERSION="0.11.3", debug=print, info=print, warn=print, error=print }
 
 local updaterules, updateconstantschain, dirtyblocks
 
@@ -290,7 +290,7 @@ function ZSS.matches(selector, el)
 	end
 	for _,name in ipairs(selector.data) do
 		local val = el.data and el.data[name]
-		if not val then return false end
+		if val==nil then return false end
 
 		local attr = selector.data[name]
 		if attr~=true then
