@@ -1,0 +1,12 @@
+s1#foo.a.b.c.d.e { p1:'s1'; p2:'s1'; p3:'s1'; p4:'s1'; p5:'s1' }
+s2#foo.a.b.c.d.e { p1:'v1' }
+s2#foo.a.b.c.d.e { p2:'v2' }
+s2#foo.a.b.c.d.e { p3:'v3' }
+s2#foo.a.b.c.d.e { p4:'v4' }
+s2#foo.a.b.c.d.e { p5:'v5' }
+
+s3#foo.a.b.c.d.e { p1:'v1'; p2:'v1'; p3:'v1'; p4:'v1'; p5:'v1' }
+s3#foo.a.b.c.d.e { p2:'v2'; p3:'v2'; p4:'v2'; p5:'v2' }
+s3#foo.a.b.c.d.e { p3:'v3'; p4:'v3'; p5:'v3' }
+s3#foo.a.b.c.d.e { p4:'v4'; p5:'v4' }
+s3#foo.a.b.c.d.e { p5:'v5' }
