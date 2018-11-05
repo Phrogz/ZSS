@@ -1,4 +1,5 @@
 s1#foo.a.b.c.d.e { p1:'s1'; p2:'s1'; p3:'s1'; p4:'s1'; p5:'s1' }
+
 s2#foo.a.b.c.d.e { p1:'v1' }
 s2#foo.a.b.c.d.e { p2:'v2' }
 s2#foo.a.b.c.d.e { p3:'v3' }
@@ -10,3 +11,104 @@ s3#foo.a.b.c.d.e { p2:'v2'; p3:'v2'; p4:'v2'; p5:'v2' }
 s3#foo.a.b.c.d.e { p3:'v3'; p4:'v3'; p5:'v3' }
 s3#foo.a.b.c.d.e { p4:'v4'; p5:'v4' }
 s3#foo.a.b.c.d.e { p5:'v5' }
+
+s4.a.b.c.d.e { p1:'s1'; p2:'s1'; p3:'s1'; p4:'s1'; p5:'s1' }
+
+s5.a.b.c.d.e { p1:'v1' }
+s5.a.b.c.d.e { p2:'v2' }
+s5.a.b.c.d.e { p3:'v3' }
+s5.a.b.c.d.e { p4:'v4' }
+s5.a.b.c.d.e { p5:'v5' }
+
+s6.a.b.c.d.e { p1:'v1'; p2:'v1'; p3:'v1'; p4:'v1'; p5:'v1' }
+s6.a.b.c.d.e { p2:'v2'; p3:'v2'; p4:'v2'; p5:'v2' }
+s6.a.b.c.d.e { p3:'v3'; p4:'v3'; p5:'v3' }
+s6.a.b.c.d.e { p4:'v4'; p5:'v4' }
+s6.a.b.c.d.e { p5:'v5' }
+
+
+#id1.a.b.c.d.e { p1:'s1'; p2:'s1'; p3:'s1'; p4:'s1'; p5:'s1' }
+
+#id2.a.b.c.d.e { p1:'v1' }
+#id2.a.b.c.d.e { p2:'v2' }
+#id2.a.b.c.d.e { p3:'v3' }
+#id2.a.b.c.d.e { p4:'v4' }
+#id2.a.b.c.d.e { p5:'v5' }
+
+#id3.a.b.c.d.e { p1:'v1'; p2:'v1'; p3:'v1'; p4:'v1'; p5:'v1' }
+#id3.a.b.c.d.e { p2:'v2'; p3:'v2'; p4:'v2'; p5:'v2' }
+#id3.a.b.c.d.e { p3:'v3'; p4:'v3'; p5:'v3' }
+#id3.a.b.c.d.e { p4:'v4'; p5:'v4' }
+#id3.a.b.c.d.e { p5:'v5' }
+
+.a1.b1.c1.d1.e1 { p1:'s1'; p2:'s1'; p3:'s1'; p4:'s1'; p5:'s1' }
+
+.a2.b2.c2.d2.e2 { p1:'v1' }
+.a2.b2.c2.d2.e2 { p2:'v2' }
+.a2.b2.c2.d2.e2 { p3:'v3' }
+.a2.b2.c2.d2.e2 { p4:'v4' }
+.a2.b2.c2.d2.e2 { p5:'v5' }
+
+.a3.b3.c3.d3.e3 { p1:'v1'; p2:'v1'; p3:'v1'; p4:'v1'; p5:'v1' }
+.a3.b3.c3.d3.e3 { p2:'v2'; p3:'v2'; p4:'v2'; p5:'v2' }
+.a3.b3.c3.d3.e3 { p3:'v3'; p4:'v3'; p5:'v3' }
+.a3.b3.c3.d3.e3 { p4:'v4'; p5:'v4' }
+.a3.b3.c3.d3.e3 { p5:'v5' }
+
+
+s11#foo { p1:'s1'; p2:'s1'; p3:'s1'; p4:'s1'; p5:'s1' }
+
+s12#foo { p1:'v1' }
+s12#foo { p2:'v2' }
+s12#foo { p3:'v3' }
+s12#foo { p4:'v4' }
+s12#foo { p5:'v5' }
+
+s13#foo { p1:'v1'; p2:'v1'; p3:'v1'; p4:'v1'; p5:'v1' }
+s13#foo { p2:'v2'; p3:'v2'; p4:'v2'; p5:'v2' }
+s13#foo { p3:'v3'; p4:'v3'; p5:'v3' }
+s13#foo { p4:'v4'; p5:'v4' }
+s13#foo { p5:'v5' }
+
+s14 { p1:'s1'; p2:'s1'; p3:'s1'; p4:'s1'; p5:'s1' }
+
+s15 { p1:'v1' }
+s15 { p2:'v2' }
+s15 { p3:'v3' }
+s15 { p4:'v4' }
+s15 { p5:'v5' }
+
+s16 { p1:'v1'; p2:'v1'; p3:'v1'; p4:'v1'; p5:'v1' }
+s16 { p2:'v2'; p3:'v2'; p4:'v2'; p5:'v2' }
+s16 { p3:'v3'; p4:'v3'; p5:'v3' }
+s16 { p4:'v4'; p5:'v4' }
+s16 { p5:'v5' }
+
+
+#id4 { p1:'s1'; p2:'s1'; p3:'s1'; p4:'s1'; p5:'s1' }
+
+#id5 { p1:'v1' }
+#id5 { p2:'v2' }
+#id5 { p3:'v3' }
+#id5 { p4:'v4' }
+#id5 { p5:'v5' }
+
+#id6 { p1:'v1'; p2:'v1'; p3:'v1'; p4:'v1'; p5:'v1' }
+#id6 { p2:'v2'; p3:'v2'; p4:'v2'; p5:'v2' }
+#id6 { p3:'v3'; p4:'v3'; p5:'v3' }
+#id6 { p4:'v4'; p5:'v4' }
+#id6 { p5:'v5' }
+
+@vars { mine:17 }
+
+#idstr { p1:'str' }
+#idfun { p1:echo(42) }
+#iddat { p1:@d }
+#idvar { p1:global+mine }
+#iddyn { p1:!echo(42) }
+
+#idstr[@d=17] { p1:'str2' }
+#idfun[@d=17] { p1:echo(17) }
+#iddat[@d=17] { p1:@d }
+#idvar[@d=17] { p1:global+mine-global }
+#iddyn[@d=17] { p1:!echo(17) }
