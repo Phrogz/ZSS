@@ -5,7 +5,7 @@
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.11.3", debug=print, info=print, warn=print, error=print }
+local ZSS = { VERSION="0.11.4", debug=print, info=print, warn=print, error=print }
 
 local updaterules, updateconstantschain, dirtyblocks
 
@@ -192,7 +192,7 @@ function ZSS:add(css, sheetid)
 		-- Convert declarations into a table mapping property to value
 		local decl_str = rule_str:match('[^{]*(%b{})'):sub(2,-2)
 		local declarations = {}
-		for key,val in decl_str:gmatch('([^%s:]+)%s*:%s*([^;]+)') do
+		for key,val in decl_str:gmatch('([^%s:;]+)%s*:%s*([^;]+)') do
 			declarations[key] = self:compile(val, sheetid, key)
 		end
 
