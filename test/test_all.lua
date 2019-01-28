@@ -10,6 +10,45 @@ zss.error = devnull
 
 _ENV = require('lunity')('ZSS Tests')
 
+function test.basic_parsing()
+	local style = zss:new()
+	style:add[[
+		a1 {
+			a: 0;
+			b: 1;
+			c: 2;
+		}
+		b1 { a:0; b:1; c:2; }
+		c1 { a:0; b:1; c:2 }
+		d1 { a:0;b:1; c:2 }
+		e1 {a:0;b:1;c:2}
+
+		a2 {
+			b: 1;
+			c: 2;
+			d: {x=1, y=2};
+			e:3;
+		}
+		b2 { b:1; c:2; d:{x=1, y=2}; e:3; }
+		c2 { b:1; c:2; d:{x=1, y=2}; e:3 }
+		d2 { b:1; c:2;d:{x=1,y=2};e:3; }
+		e2 {b:1;c:2;d:{x=1,y=2};e:3}
+	]]
+	local expected = { a=0, b=1, c=2 }
+	assertTableEquals(style:match('a1'), expected)
+	assertTableEquals(style:match('b1'), expected)
+	assertTableEquals(style:match('c1'), expected)
+	assertTableEquals(style:match('d1'), expected)
+	assertTableEquals(style:match('e1'), expected)
+
+	local expected = { b=1, c=2, d={x=1, y=2}, e=3 }
+	assertTableEquals(style:match('a2'), expected)
+	assertTableEquals(style:match('b2'), expected)
+	assertTableEquals(style:match('c2'), expected)
+	assertTableEquals(style:match('d2'), expected)
+	assertTableEquals(style:match('e2'), expected)
+end
+
 function test.load_two_sheets()
 	local style = zss:new()
 	style:add[[
