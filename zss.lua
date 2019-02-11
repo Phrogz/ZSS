@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.11.3
+   ZSS v0.11.5
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.11.4", debug=print, info=print, warn=print, error=print }
+local ZSS = { VERSION="0.11.5", debug=print, info=print, warn=print, error=print }
 
 local updaterules, updateconstantschain, dirtyblocks
 
@@ -33,7 +33,7 @@ function ZSS:new(opts)
 	setmetatable(style,{__index=self})
 	style:directives{
 		-- Process @vars { foo:42 } with sheet ordering and chaining
-		vars = function(self, values, sheetid, declarations)
+		vars = function(self, values, sheetid, blocks)
 			local consts = self._sheetconst[sheetid]
 			local blox = self._sheetblox[sheetid]
 			if not blox then
@@ -42,13 +42,13 @@ function ZSS:new(opts)
 			end
 			for k,v in pairs(values) do
 				consts[k] = v
-				blox[k] = declarations[k]
+				blox[k] = blocks[k]
 			end
 		end
 	}
 
 	if opts then
-		if opts.constants  then style:constants(opts.constants)      end
+		if opts.constants  then style:constants(opts.constants,true) end
 		if opts.directives then style:directives(opts.directives)    end
 		if opts.basecss    then style:add(opts.basecss, 'basecss')   end
 		if opts.files      then style:load(table.unpack(opts.files)) end
@@ -76,8 +76,9 @@ function ZSS:load(...)
 end
 
 -- Usage: myZSS:constants{ none=false, transparent=color(0,0,0,0), rgba=color.makeRGBA }
-function ZSS:constants(valuemap)
+function ZSS:constants(valuemap, preserveCaches)
 	for k,v in pairs(valuemap) do self._constants[k]=v end
+	if not preserveCaches then dirtyblocks(self) end
 	return self
 end
 
@@ -189,23 +190,23 @@ function ZSS:add(css, sheetid)
 	self._rules[sheetid] = {}
 
 	for rule_str in css:gsub('/%*.-%*/',''):gmatch('[^%s][^{]+%b{}') do
-		-- Convert declarations into a table mapping property to value
+		-- Convert declarations into a table mapping property to block
 		local decl_str = rule_str:match('[^{]*(%b{})'):sub(2,-2)
-		local declarations = {}
+		local blocks = {}
 		for key,val in decl_str:gmatch('([^%s:;]+)%s*:%s*([^;]+)') do
-			declarations[key] = self:compile(val, sheetid, key)
+			blocks[key] = self:compile(val, sheetid, key)
 		end
 
 		-- Create a unique rule for each selector in the rule
 		local selectors_str = rule_str:match('(.-)%s*{')
 		for selector_str in selectors_str:gmatch('%s*([^,]+)') do
-			-- Check if this is an at-rule that needs processing
-			local atrule = selector_str:match('^%s*@([%a_][%w_-]*)%s*$')
-			if atrule and self._directives[atrule] then
+			-- Check if this is a directive (at-rule) that needs processing
+			local name = selector_str:match('^%s*@([%a_][%w_-]*)%s*$')
+			if name and self._directives[name] then
 				-- bake value blocks into values before handing off
 				local values = {}
-				for k,block in pairs(declarations) do values[k] = self:eval(block) end
-				self._directives[atrule](self, values, sheetid, declarations)
+				for k,block in pairs(blocks) do values[k] = self:eval(block) end
+				self._directives[name](self, values, sheetid, blocks)
 			end
 
 			local selector = self:parse_selector(selector_str:match "^%s*(.-)%s*$", sheetid)
@@ -216,16 +217,14 @@ function ZSS:add(css, sheetid)
 					selector.type and 1 or 0,
 					0 -- the document order will be determined during updaterules()
 				}
-				local rule = {selector=selector, declarations=declarations, doc=sheetid}
+				local rule = {selector=selector, declarations=blocks, doc=sheetid}
 				table.insert(self._rules[sheetid], rule)
 			end
 		end
 	end
 
 	-- sort rules and determine active based on rank
-	if not self._deferupdate then
-		updaterules(self)
-	end
+	if not self._deferupdate then updaterules(self) end
 
 	return self, sheetid
 end
@@ -340,10 +339,14 @@ function ZSS:enable(sheetid)
 	if self._rules[sheetid] then
 		self._sheets[sheetid] = true
 		updaterules(self)
+		updateconstantschain(self)
+		dirtyblocks(self,sheetid)
 	elseif self._sheets[sheetid]~=nil then
 		-- wipe out a local override that may have been disabling an ancestor
 		self._sheets[sheetid] = nil
 		updaterules(self)
+		updateconstantschain(self)
+		dirtyblocks(self,sheetid)
 	else
 		local disabled = {}
 		local quote='%q'

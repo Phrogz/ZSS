@@ -171,6 +171,40 @@ function test.directives()
 	assertEqual(style:match('text').fill, 'white')
 end
 
+function test.vars()
+	local style = zss:new()
+	style:constants{ a=17 }
+	style:add[[
+	  @vars { b:25; c:(a or 0)+25; d:(a or 0) + (b or 0); e:f; f:99; }
+	  zzz { a:a; b:b; c:c; d:d; e:e; f:f; m:m; n:n; }
+	  @vars { m:42; n:(a or 0)+(b or 0) }
+	]]
+	assertEqual(style:match('zzz').a, 17, 'styles can read from constants (a)')
+	assertEqual(style:match('zzz').b, 25, 'styles can read from @vars (b)')
+	assertEqual(style:match('zzz').c, 42, '@vars can read constants (c)')
+
+	-- The behavior of variables in the same sheet depending on one another is undefined
+	-- assertEqual(style:match('zzz').d, 42, '@vars can use variables already declared in the same block (d)')
+	-- assertNil(style:match('zzz').e, '@vars CANNOT use variables declared later in the same block (e)')
+	-- assertEqual(style:match('zzz').n, 42, '@vars can read from @vars declared previously in the same sheet (n)')
+
+	-- Whether rules can use variables declared later in the sheet is undefined
+	-- assertEqual(style:match('zzz').m, 42, 'styles can read from @vars declared later in the same sheet (m)') -- sketchy
+
+	style:constants{ a=1 }
+	assertEqual(style:match('zzz').a, 1,  'constants are updated (a2)')
+	assertEqual(style:match('zzz').b, 25, '@vars not referencing constants are unaffected by constant changes (b2)')
+	assertEqual(style:match('zzz').c, 26, '@vars reading constants are updated (c2)')
+
+	-- The behavior of variables in the same sheet depending on one another is undefined
+	-- assertEqual(style:match('zzz').d, 26, '@vars can use variables already declared in the same block (d2)')
+	-- assertNil(style:match('zzz').e, '@vars CANNOT use variables declared later in the same block (e2)')
+	-- assertEqual(style:match('zzz').n, 26, '@vars can read from @vars declared previously in the same sheet (n2)')
+
+	-- Whether rules can use variables declared later in the sheet is undefined
+	-- assertEqual(style:match('zzz').m, 42, 'styles can read from @vars declared later in the same sheet (m2)') -- sketchy
+end
+
 local function countkeys(t)
 	local i=0
 	for _,_ in pairs(t) do i=i+1 end
@@ -505,6 +539,13 @@ function test.per_sheet_constants()
 	assertEqual(s:match('sheet3').e, 50,      'inherited constants are still visible')
 
 	s:enable(id1)
+
+	assertEqual(s:match('sheet2').a, 1,   'static declarations can read constants from earlier sheets')
+	assertEqual(s:match('sheet2').b, 20,  'new static declarations can read new constants')
+	assertEqual(s:match('sheet2').c, 30,  'new static declarations can read new constants')
+	assertEqual(s:match('sheet2').q, 5,   '@vars can read values from previously-loaded sheets')
+	assertEqual(s:match('sheet2').e, 50)
+
 	s:disable(id2)
 
 	assertEqual(s:match('sheet1').a, 1,   're-enabling a sheet allows vars to work')

@@ -118,6 +118,8 @@ style:match{ type='text', tags={debug=1}, data={speed=37} }
 --> {fill=<color 'red'>, font="main", opacity=1, size=20, stroke=false}
 ```
 
+
+
 # Descriptor Tables versus Strings
 
 As seen in the example above, you can describe an 'element' to find declarations for using either a table or a string. The two are equivalent in terms of _functionality_:
@@ -135,6 +137,81 @@ They differ in terms of performance and memory implications, however:
 If you have elements with roughly the same tags or data value that you use repeatedly throughout the lifespan of your application, pass a string to `match()`.
 
 If you have elements whose tags or (notably) attribute values are constantly changing, and unlikely to be seen again, pass a table to `match()`.
+
+
+
+# Per-sheet Variables
+
+ZSS adds a custom `@vars` directive handler that allows each sheet loaded into a style to have its own set of variables expressed as declarations, that can be used in other rules. For example:
+
+```css
+@vars  { baseFontSize:30 }
+body   { fontSize: baseFontSize   }
+header { fontSize: baseFontSize*2 }
+```
+
+Loading multiple stylesheets into the same style allows later stylesheets to use variables defined in an earlier stylesheet. Further, disabling and enabling a stylesheet disables its variables. Combining these allows you to load and control 'theme' stylesheets. For example:
+
+**day.css**
+
+```css
+@vars {
+  background: 'white';
+  foreground: 'black';
+}
+```
+
+**night.css**
+
+```css
+@vars {
+  background: 'darkblue';
+  foreground: 'lightblue';
+}
+```
+
+**content.css**
+
+```css
+body { bgColor:background; textColor:foreground }
+```
+
+```lua
+local style = zss:new{ files={'day.css', 'night.css', 'content.css'} }
+print(style:match('body').bgColor) --> darkblue
+
+style:disable('night.css')
+print(style:match('body').bgColor) --> white
+
+style:disable('day.css')
+print(style:match('body').bgColor) --> nil
+```
+
+Multiple `@vars { … }` directives may appear anywhere in a stylesheet, and safely rely on variables from previously-loaded stylesheets as well as [constants](#myzssconstantsvalue_map) set for the style. However, the following behavior is undefined:
+
+* Placing a rule that uses a variable before the `@vars { … }` directive that defines the variable.
+
+    ```css
+    /* this rule should be after the @vars */
+    bad { size:x }
+    @vars { x:20 }
+    ```
+
+
+* Referencing the value of a variable defined in the same stylesheet:
+
+    ```css
+    @vars {
+       x : 25;
+       y : x + 17; /* regardless of order, do not rely on another variable… */
+    }
+    @vars {
+       z : x * 2; /* …not even in a later @vars block in the same sheet */
+    }
+    ```
+    
+    _A future release may allow later @vars blocks to refer to earlier blocks reliably._
+
 
 
 # API
@@ -166,19 +243,19 @@ URL  = require'urlhandler'
 FONT = require'myfontlib'
 ZSS  = require'zss'
 local style = ZSS:new{
-  constants  = {
-    none      = false,
-    color     = require('color'),
-    url       = URL.processURL,
-  },
-  directives = {
-    -- e.g. @font-face { font-family='bold'; src:'fonts/Arial-bold.ttf' }
-    ['font-face'] = function(style, props)
-      FONT.createFont(props['font-family'], props.src)
-    end
-  },
-  basecss  = [[...css code...]],
-  files    = {'a.css', 'b.css'},
+   constants = {
+      none  = false,
+      color = require('color'),
+      url   = URL.processURL,
+   },
+   directives = {
+      -- e.g. @font-face { font-family='bold'; src:'fonts/Arial-bold.ttf' }
+      ['font-face'] = function(style, props)
+         FONT.createFont(props['font-family'], props.src)
+      end
+   },
+   basecss = [[...css code...]],
+   files   = {'a.css', 'b.css'},
 }
 ```
 
