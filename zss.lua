@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.11.5
+   ZSS v0.11.6
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.11.5", debug=print, info=print, warn=print, error=print }
+local ZSS = { VERSION="0.11.6", debug=print, info=print, warn=print, error=print }
 
 local updaterules, updateconstantschain, dirtyblocks
 
@@ -17,17 +17,17 @@ local updaterules, updateconstantschain, dirtyblocks
 -- }
 function ZSS:new(opts)
 	local style = {
-		_directives = {}, -- map from name of at rule (without @) to function to invoke
-		_constants  = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
-		_sheets     = {}, -- array of sheetids, also mapping sheetid to its active state
-		_sheetconst = {}, -- map of sheetid to table of constants for that sheet
-		_sheetblox  = {}, -- map of sheetid to table of blocks underlying the constants
-		_envs       = {}, -- map of sheetid to table that mutates to evaluate functions
-		_rules      = {}, -- map of sheetids to array of rule tables, each sorted by document order
-		_active     = {}, -- array of rule tables for active sheets, sorted by specificity (rank)
-		_computed   = {}, --setmetatable({},{__mode='kv'}), -- cached element signatures mapped to computed declarations
-		_kids       = setmetatable({},{__mode='k'}),  -- set of child tables mapped to true
-		_parent     = nil, -- reference to the style instance that spawned this one
+		_directives  = {}, -- map from name of at rule (without @) to function to invoke
+		_constants   = {}, -- value literal strings mapped to equivalent values (e.g. "none"=false)
+		_sheets      = {}, -- array of sheetids, also mapping sheetid to its active state
+		_sheetconst  = {}, -- map of sheetid to table of constants for that sheet
+		_sheetblocks = {}, -- map of sheetid to table of blocks underlying the constants
+		_envs        = {}, -- map of sheetid to table that mutates to evaluate functions
+		_rules       = {}, -- map of sheetids to array of rule tables, each sorted by document order
+		_active      = {}, -- array of rule tables for active sheets, sorted by specificity (rank)
+		_computed    = {}, --setmetatable({},{__mode='kv'}), -- cached element signatures mapped to computed declarations
+		_kids        = setmetatable({},{__mode='k'}),  -- set of child tables mapped to true
+		_parent      = nil, -- reference to the style instance that spawned this one
 	}
 	style._envs[1] = setmetatable({},{__index=style._constants})
 	setmetatable(style,{__index=self})
@@ -35,14 +35,15 @@ function ZSS:new(opts)
 		-- Process @vars { foo:42 } with sheet ordering and chaining
 		vars = function(self, values, sheetid, blocks)
 			local consts = self._sheetconst[sheetid]
-			local blox = self._sheetblox[sheetid]
-			if not blox then
-				blox = {}
-				self._sheetblox[sheetid] = blox
+			local blocksforthissheet = self._sheetblocks[sheetid]
+			if not blocksforthissheet then
+				blocksforthissheet = {}
+				self._sheetblocks[sheetid] = blocksforthissheet
 			end
-			for k,v in pairs(values) do
-				consts[k] = v
-				blox[k] = blocks[k]
+			-- iterate over blocks instead of values, in case a value is nil
+			for k,v in pairs(blocks) do
+				consts[k] = values[k]
+				blocksforthissheet[k] = blocks[k]
 			end
 		end
 	}
@@ -415,15 +416,15 @@ updateconstantschain = function(self)
 end
 
 dirtyblocks = function(self, sheetid)
-	local dirty = not sheetid
+	local dirtythissheet = not sheetid
 	for _,id in ipairs(self._sheets) do
-		if id==sheetid then dirty=true end
-		if dirty then
+		if id==sheetid then dirtythissheet=true end
+		if dirtythissheet then
 			for _,rule in ipairs(self._rules[id]) do
 				for k,block in pairs(rule.declarations) do block[2]=false end
 			end
-			if self._sheetblox[id] then
-				for k,block in pairs(self._sheetblox[id]) do
+			if self._sheetblocks[id] then
+				for k,block in pairs(self._sheetblocks[id]) do
 					self._sheetconst[id][k] = self:eval(block,nil,true)
 				end
 			end

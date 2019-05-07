@@ -203,6 +203,14 @@ function test.vars()
 
 	-- Whether rules can use variables declared later in the sheet is undefined
 	-- assertEqual(style:match('zzz').m, 42, 'styles can read from @vars declared later in the same sheet (m2)') -- sketchy
+
+	-- Test for issue #4 edge case
+	style = zss:new{basecss = [[@vars {v:c} xxx {c:c; v:v}]]}
+	assertEqual(style:match('xxx').c, nil, 'constants added before parsing are nil')
+	assertEqual(style:match('xxx').v, nil, 'constants added before parsing are nil')
+	style:constants{ c=42 }
+	assertEqual(style:match('xxx').c, 42, 'constants added after parsing update rules')
+	assertEqual(style:match('xxx').v, 42, 'constants added after parsing update @vars')
 end
 
 local function countkeys(t)
