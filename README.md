@@ -23,14 +23,13 @@ ZSS is a small, simple, pure Lua library that parses simple CSS (see below for l
       circle[@hue]    { fill:hsv(@hue, 1, 1) }
     ]]
 
-    local props = style:match('circle')
+    local props = style:match{type='circle'}
     inspect(props)
     --> { fill=<color 'white'>, radius=3 }
 
     local rnd=math.random
     for r=1,4 do
-      local attrs = { r=r, hue=rnd(360) }
-      local props = style:match{type='circle', data=attrs}
+      local props = style:match{type='circle', r=r, hue=rnd(360) }
       inspect(props)
     end
     --> { fill=<color r=1.0 g=0.0 b=1.0 a=1.0>, radius=1 }
@@ -48,15 +47,30 @@ ZSS is a small, simple, pure Lua library that parses simple CSS (see below for l
 * Due to a simple parser:
   * you must not have a `{` character inside a selector. (Then again, when would you?)
   * you must not have a `;` character inside your declarations.
+  * you must not have a `@` character inside your declarations.
   * you must not have an _unpaired_ `}` character inside your declarations.
 
 The following CSS is currently unparsable in many ways:
 
 ```css
 boo[a='{'] { str:'nope'         } /* The { causes the selector to stop being parsed too soon    */
-boo2       { no1:';'; ok:1      } /* The ; causes the declaration to stop being parsed too soon */
-boo3       { no2:'}'            } /* The } causes the declaration to stop being parsed too soon */
+boo2       { no1:';'; ok:1      } /* The ; causes the value to stop being parsed too soon       */
+boo3       { email:'me@here';   } /* The value get destroyed and becomes 'me_data_.here'        */
+boo4       { no2:'}'            } /* The } causes the declaration to stop being parsed too soon */
 yay        { tbl:{ a={b='ok'} } } /* Having { and } paired is OK, however                       */
+```
+
+If you need to have one of these characters inside a string, you can escape them using their hexadecimal escape equivalent:
+
+* `;` — \x3B
+* `@` — \x40
+* `{` — \x7B
+* `}` — \x7D
+
+```css
+person   { text:'me\x40company.com'       } /* me@company.com    */
+message  { text:'tl\x3Bdr: this works'    } /* tl;dr: this works */
+mustache { normal:':\x7B'; wicked:':\x7D' } /*    :{     :}      */
 ```
 
 
@@ -102,42 +116,18 @@ style:load('my.css')
 style:match{ type='line' }
 --> {fill=false, size=20, stroke=<color 'white'>}
 
-style:match'line'
---> {fill=false, size=20, stroke=<color 'white'>}
-
-style:match'text'
+style:match{ type='text' }
 --> {fill=<color 'white'>, font="main", size=20, stroke=false}
 
-style:match'text.important'
+style:match{ type='text', tags={important=1} }
 --> {fill={1, 1, 0}, font="main", size=20, stroke=false}
 
-style:match'#title.important'
+style:match{ id='title' }
 --> {fill={1, 1, 0}, font="bold", size=20, stroke=<color 'white'>}
 
-style:match{ type='text', tags={debug=1}, data={speed=37} }
+style:match{ type='text', tags={debug=1}, speed=37 }
 --> {fill=<color 'red'>, font="main", opacity=1, size=20, stroke=false}
 ```
-
-
-
-# Descriptor Tables versus Strings
-
-As seen in the example above, you can describe an 'element' to find declarations for using either a table or a string. The two are equivalent in terms of _functionality_:
-
-```lua
-style:match{ type='line', id='forecast', tags={tag1=1,tag2=1}, data={ clouds=85 } }
-style:match'line#forecast.tag1.tag2[clouds=85]'
-```
-
-They differ in terms of performance and memory implications, however:
-
-* The table form is roughly 3–4× faster than the string form the _first_ time it is used. It causes a new table of computed declarations to be computed each time; this table is not retained by the library.
-* The string form is roughly 40× faster than the table form when the _exact_ same string has previously been seen. The string form causes the computed declarations table to be cached _forever_ in the library.
-
-If you have elements with roughly the same tags or data value that you use repeatedly throughout the lifespan of your application, pass a string to `match()`.
-
-If you have elements whose tags or (notably) attribute values are constantly changing, and unlikely to be seen again, pass a table to `match()`.
-
 
 
 # Per-sheet Variables
@@ -177,14 +167,15 @@ body { bgColor:background; textColor:foreground }
 ```
 
 ```lua
+local body = {type='body'}
 local style = zss:new{ files={'day.css', 'night.css', 'content.css'} }
-print(style:match('body').bgColor) --> darkblue
+print(style:match(body).bgColor) --> darkblue
 
 style:disable('night.css')
-print(style:match('body').bgColor) --> white
+print(style:match(body).bgColor) --> white
 
 style:disable('day.css')
-print(style:match('body').bgColor) --> nil
+print(style:match(body).bgColor) --> nil
 ```
 
 Multiple `@vars { … }` directives may appear anywhere in a stylesheet, and safely rely on variables from previously-loaded stylesheets as well as [constants](#myzssconstantsvalue_map) set for the style. However, the following behavior is undefined:
@@ -221,7 +212,7 @@ Multiple `@vars { … }` directives may appear anywhere in a stylesheet, and saf
 * [`myZSS:directives()`](#myzssdirectiveshandlers) — set at-rule handlers
 * [`myZSS:add()`](#myzssaddcss) — parse CSS from string
 * [`myZSS:load()`](#myzssload) — load CSS from file
-* [`myZSS:match()`](#myzssmatchelement_descriptor) — compute the declarations that apply to an element
+* [`myZSS:match()`](#myzssmatchelement) — compute the declarations that apply to an element
 * [`myZSS:extend()`](#myzssextend) — create a new style that derives from this one
 * [`myZSS:disable()`](#myzssdisablesheetid) — stop using rules from a particular set of CSS
 * [`myZSS:enable()`](#myzssenablesheetid) — resume using rules from a particular set of CSS
@@ -280,8 +271,8 @@ The return value is the invoking ZSS style instance (for method chaining).
 ```lua
 local style = ZSS:new()
 style:constants{ none=false, white={1,1,1}, red={1,0,0} }
-style:add('* {a:none; b:white; c:red; d:orange } ')
-style:match 'x'
+style:add('* { a:none; b:white; c:red; d:orange } ')
+style:match{ id='foo' }
 --> {a=false, b={1,1,1}, c={1,0,0}, d=nil}
 ```
 
@@ -348,39 +339,30 @@ style:load('a.css', 'b.css', 'c.css')
 ```
 
 
-## myZSS:match(element_descriptor)
+## myZSS:match(element)
 
 Use all rules in the style to compute the declarations that apply to described element.
 
-`element_descriptor` may be a selector-like string describing the element—e.g. `type.tag1.tag2`, `#someid[var1=42][var2=3.8]`—or a table using any/all/none of the keys: `{ type='mytype', id='myid', tags={tag1=1, tag2=1}, data={var1=42, var2=3.8}}`.
+`element` must be a table using any/all/none of the keys `type`, `id`, and `tags`, and may include arbitrary additional data properties:  
+`{type='mytype', id='myid', tags={tag1=1, tag2=1}, var1=42, var2=3.8}`.
 
-See the section _[Descriptor Tables versus Strings](#descriptor-tables-versus-strings)_ above for a discussion on the implications of using strings versus tables.
-
-_Tip_: while tag, id, and data order doesn't matter for computing the declarations that apply, each unique string will recompute the applicable declarations instead of using the cache. For example, the following five strings all produce the same results, but require the table to be recomputed five times instead of cached:
-
-```lua
-local d1 = style:match'foo#bar.jim.jam[a=7]'
-local d2 = style:match'foo#bar.jam.jim[a=7]'
-local d3 = style:match'foo.jim#bar.jam[a=7]'
-local d4 = style:match'foo[a=7]#bar.jim.jam'
-local d5 = style:match'foo[a=7].jim.jam#bar'
-```
-
-Consequently, it is advisable to establish a convention when crafting your strings. The author of ZSS recommends type/id/tags/data, where tags and data are ordered alphabetically. For example: `type#id.t1.t2[a1=1][a2=2]`.
 
 ### Example:
 
 ```lua
 local style = ZSS:new():add[[
-  * { fill:none; stroke:white; opacity:1.0 }
-  text { fill:white; stroke:none }
+  *          { fill:none;  stroke:white; opacity:1.0 }
+  text       { fill:white; stroke:none }
   .important { weight:bold; fill:red }
   .debug     { opacity:0.5 }
 ]]
-local m1 = style:match('text.important')
+local m1 = style:match{ type='text', tags={important=1} }
 --> { fill='red', opacity=1.0, stroke='none', weight='bold' }
 
 local m2 = style:match{ type='line', tags={debug=1} }
+--> { fill='none', opacity=0.5, stroke='white' }
+
+local m3 = style:match{}
 --> { fill='none', opacity=1.0, stroke='white' }
 ```
 
@@ -411,30 +393,29 @@ local main   = ZSS:new{ files={'base.css', 'day.css'} }
 local style1 = main:clone():load('style1a.css')
 local _, bID = style1:add('#additional { rules:here }')
 
-style1:match() --> uses base.css, day.css, style1a.css, and additional rules loaded during add()
+style1:match(…) --> uses base.css, day.css, style1a.css, and additional rules loaded during add()
 
 style1:disable(bID)
-style1:match() --> uses base.css, day.css, style1a.css
+style1:match(…) --> uses base.css, day.css, style1a.css
 
 main:disable('day.css')
-style1:match() --> uses base.css and style1a.css
-main:match() --> uses base.css only
+style1:match(…) --> uses base.css and style1a.css
+main:match(…)   --> uses base.css only
 
 main:enable('day.css')
-style1:match() --> uses base.css, day.css, and style1a.css
-main:match() --> uses base.css and day.css
+style1:match(…) --> uses base.css, day.css, and style1a.css
+main:match(…)   --> uses base.css and day.css
 
 style1:disable('day.css')
-style1:match() --> uses base.css and doc1a.css
-main:match() --> uses base.css and day.css
+style1:match(…) --> uses base.css and doc1a.css
+main:match(…)   --> uses base.css and day.css
 ```
 
-**Note**: As shown in the last lines of the example above, a cloned style may disable rules loaded in its parent; however, doing so does not disable them for the parent (or other clones of the parent).
+**Note**: As shown in the last lines of the example above, a cloned style may disable rules _loaded_ in its parent; however, doing so does not disable them for the parent (or other clones of the parent).
 
 ## myZSS:enable(sheetid)
 
 Re-enable CSS previously disabled with `disable()`. (See `disable()` for an example.)
-
 
 
 # License & Contact

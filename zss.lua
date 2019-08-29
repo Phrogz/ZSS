@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v0.11.6
+   ZSS v1.0
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="0.11.6", debug=print, info=print, warn=print, error=print }
+local ZSS = { VERSION="1.0", debug=print, info=print, warn=print, error=print }
 
 local updaterules, updateconstantschain, dirtyblocks
 
@@ -25,8 +25,7 @@ function ZSS:new(opts)
 		_envs        = {}, -- map of sheetid to table that mutates to evaluate functions
 		_rules       = {}, -- map of sheetids to array of rule tables, each sorted by document order
 		_active      = {}, -- array of rule tables for active sheets, sorted by specificity (rank)
-		_computed    = {}, --setmetatable({},{__mode='kv'}), -- cached element signatures mapped to computed declarations
-		_kids        = setmetatable({},{__mode='k'}),  -- set of child tables mapped to true
+		_kids        = setmetatable({},{__mode='k'}), -- set of child tables mapped to true
 		_parent      = nil, -- reference to the style instance that spawned this one
 	}
 	style._envs[1] = setmetatable({},{__index=style._constants})
@@ -230,58 +229,36 @@ function ZSS:add(css, sheetid)
 	return self, sheetid
 end
 
--- Given an element descriptor string or table, compute the declarations that apply. For example:
--- local values = myZSS:match '.ped'
--- local values = myZSS:match 'text#accel.label'
--- local values = myZSS:match 'text#accel.value.negative[val=0.3]'
--- local values = myZSS:match{ type='text', id='accel', tags={value=1, negative=1}, data={value=0.3} }
---
--- Using a string will cache the result. Later requests that use the same string are 40x faster.
---
--- Use an element descriptor will not use the cache (either for lookup or storing the result).
--- Use element descriptors when you have data values that change.
+-- Given an element table, compute the declaration(s) that apply. For example:
+-- local values = myZSS:match{tags={ped=1}}
+-- local values = myZSS:match{type='text', id='accel', tags={label=1}}
+-- local values = myZSS:match{type='text', id='accel', tags={value=1, negative=1}, value=-0.3}
 function ZSS:match(el)
-	local descriptor, computed, placeholders, data
+	local placeholders, data
 
-	-- See if we previously saved off the computed result
-	if type(el)=='string' then
-		descriptor = el
-		local compdata = self._computed[descriptor]
-		if compdata then
-			computed,data = compdata[1],compdata[2]
-		else
-			-- We didn't have one saved, so we need to parse the descriptor to an element table
-			el = self:parse_selector(descriptor, false, true)
-			data = el.data
-		end
-	end
-
-	if not computed then
-		computed = {}
-		for _,rule in ipairs(self._active) do
-			if ZSS.matches(rule.selector, el) then
-				for k,block in pairs(rule.declarations) do
-					computed[k] = block
-				end
+	local computed = {}
+	-- TODO: instead of blindly running through all active rules, maintain lists of active rules indexed by type and id and only run through lists that might apply.
+	-- Benchmark before and after to ensure that the complexity and overhead of list maintenance is acceptable.
+	for _,rule in ipairs(self._active) do
+		if ZSS.matches(rule.selector, el) then
+			for k,block in pairs(rule.declarations) do
+				computed[k] = block
 			end
 		end
 	end
 
-	-- Cache the rules, placeholders, and environment if a string was used as the `el` descriptor
-	if descriptor and not self._computed[descriptor] then
-		self._computed[descriptor] = {computed,data}
-	end
+	-- TODO: consider how to possibly re-instate the computed caches, while allowing elements to be mutated.
+	-- Perhaps cache per element table, but allow passing a flag to ignore the cache?
 
 	-- Convert blocks to values (honoring cached values)
 	local result = {}
-	local data = data or el.data or {}
 	for k,block in pairs(computed) do
-		result[k] = self:eval(block,data)
+		result[k] = self:eval(block, el)
 	end
 	return result
 end
 
--- Test to see if an element descriptor table matches a specific selector table
+-- Test to see if an element matches a specific selector table
 function ZSS.matches(selector, el)
 	if selector.type and el.type~=selector.type then return false end
 	if selector.id   and el.id~=selector.id     then return false end
@@ -289,7 +266,7 @@ function ZSS.matches(selector, el)
 		if not (el.tags and el.tags[tag]) then return false end
 	end
 	for _,name in ipairs(selector.data) do
-		local val = el.data and el.data[name]
+		local val = el[name]
 		if val==nil then return false end
 
 		local attr = selector.data[name]
@@ -364,7 +341,6 @@ end
 
 updaterules = function(self)
 	-- reset the computed and active rule list
-	self._computed = {}
 	self._active = {}
 
 	-- assume that the parent's active is already up-to-date
