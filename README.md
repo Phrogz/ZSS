@@ -43,7 +43,6 @@ ZSS is a small, simple, pure Lua library that parses simple CSS (see below for l
 
 * ZSS assumes a **flat, unordered data model**. This means that there are no hierarchical selectors (no descendants, no children), no sibling selectors, and no pseudo-elements related to position.
 * Using Lua to parse property expressions means there is no support for custom units on numbers using CSS syntax, or hexadecimal colors. You would need to wrap these in function calls like `len(5,cm)` or `color('#ff0033')`.
-* ZSS only supports simple data attribute queries in selectors: attribute presence (`[@foo]`), and simple value comparisons (`[@foo<7.3]`, `[@foo=12]`, `[@foo>0.9]`).
 * Due to a simple parser:
   * you must not have a `{` character inside a selector. (Then again, when would you?)
   * you must not have a `;` character inside your declarations.
@@ -53,11 +52,11 @@ ZSS is a small, simple, pure Lua library that parses simple CSS (see below for l
 The following CSS is currently unparsable in many ways:
 
 ```css
-boo[a='{'] { str:'nope'         } /* The { causes the selector to stop being parsed too soon    */
-boo2       { no1:';'; ok:1      } /* The ; causes the value to stop being parsed too soon       */
-boo3       { email:'me@here';   } /* The value get destroyed and becomes 'me_data_.here'        */
-boo4       { no2:'}'            } /* The } causes the declaration to stop being parsed too soon */
-yay        { tbl:{ a={b='ok'} } } /* Having { and } paired is OK, however                       */
+boo[a=='{'] { str:'nope'         } /* The { causes the selector to stop being parsed too soon    */
+boo2        { no1:';'; ok:1      } /* The ; causes the value to stop being parsed too soon       */
+boo3        { email:'me@here';   } /* The value get destroyed and becomes 'me_data_.here'        */
+boo4        { no2:'}'            } /* The } causes the declaration to stop being parsed too soon */
+yay         { tbl:{ a={b='ok'} } } /* Having { and } paired is OK, however                       */
 ```
 
 If you need to have one of these characters inside a string, you can escape them using their hexadecimal escape equivalent:
@@ -200,7 +199,7 @@ Multiple `@vars { … }` directives may appear anywhere in a stylesheet, and saf
        z : x * 2; /* …not even in a later @vars block in the same sheet */
     }
     ```
-    
+
     _A future release may allow later @vars blocks to refer to earlier blocks reliably._
 
 
@@ -250,9 +249,9 @@ local style = ZSS:new{
 }
 ```
 
-Constants can be added to later using the `constants()` method.  
-Additional directives can be added later using the `directives()` method.  
-Additional raw CSS can be parsed later using the `add()` method.  
+Constants can be added to later using the `constants()` method.
+Additional directives can be added later using the `directives()` method.
+Additional raw CSS can be parsed later using the `add()` method.
 Additional CSS files can be loaded by name later using the `load()` method.
 
 
@@ -321,7 +320,7 @@ style:add[[
 ]]
 ```
 
-The first return value is the invoking ZSS style instance (for method chaining).  
+The first return value is the invoking ZSS style instance (for method chaining).
 
 The second return value is a unique identifier that may be used to later `disable()` and `enable()` the rules loaded in this CSS.
 
@@ -343,7 +342,7 @@ style:load('a.css', 'b.css', 'c.css')
 
 Use all rules in the style to compute the declarations that apply to described element.
 
-`element` must be a table using any/all/none of the keys `type`, `id`, and `tags`, and may include arbitrary additional data properties:  
+`element` must be a table using any/all/none of the keys `type`, `id`, and `tags`, and may include arbitrary additional data properties:
 `{type='mytype', id='myid', tags={tag1=1, tag2=1}, var1=42, var2=3.8}`.
 
 

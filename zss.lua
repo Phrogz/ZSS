@@ -5,7 +5,7 @@
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="1.0", debug=print, info=print, warn=print, error=print }
+local ZSS = { VERSION="1.0", debug=print, info=print, warn=print, error=print, ANY_VALUE={}, NIL_VALUE={} }
 
 local updaterules, updateconstantschain, dirtyblocks
 
@@ -93,7 +93,7 @@ function ZSS:compile(str, sheetid, property)
 	local env = self._envs[sheetid] or self._envs[1]
 	local func,err = load('return '..str:gsub('@([%a_][%w_]*)','_data_.%1'):gsub('^!',''), str, 't', env)
 	if not func then
-		self.error(("Error compiling CSS value for '%s' in '%s': %s"):format(property, sheetid, err))
+		self.error(("Error compiling CSS expression for '%s' in '%s': %s"):format(property, sheetid, err))
 	else
 		-- [1] will hold the actual cached value (deferred until the first request)
 		-- [2] is whether or not a cached value exists in [1] (needed in case the computed value is nil)
@@ -102,7 +102,7 @@ function ZSS:compile(str, sheetid, property)
 		-- [5] indicates if the block must be computed each time, or may be cached
 		-- [6] is the sheetid (used for evaluation error messages)
 		-- [7] is the name of the property being evaluated (used for evaluation error messages)
-		return {nil,false,env,func,dynamic,sheetid,property}
+		return {nil,false,env,func,dynamic,sheetid,property,zssblock=true}
 	end
 end
 
@@ -124,7 +124,7 @@ end
 
 -- Convert a selector string into its component pieces;
 -- descriptor=true parses an element descriptor (skips some steps)
-function ZSS:parse_selector(selector_str, sheetid, descriptor)
+function ZSS:parse_selector(selector_str, sheetid)
 	local selector = {
 		type = selector_str:match('^@?[%a_][%w_-]*'),
 		id  = selector_str:match('#([%a_][%w_-]*)'),
@@ -134,31 +134,20 @@ function ZSS:parse_selector(selector_str, sheetid, descriptor)
 	-- Find all the tags
 	for name in selector_str:gmatch('%.([%a_][%w_-]*)') do
 		selector.tags[name] = true
-		if not descriptor then selector.tags[#selector.tags+1] = name end
 	end
-	if not descriptor then table.sort(selector.tags) end
 
 	-- Find all attribute sections, e.g. [@attr], [@attr<17], [attr=12], …
 	for attr in selector_str:gmatch('%[%s*(.-)%s*%]') do
 		local attr_name_only = attr:match('^@?([%a_][%w_-]*)$')
 		if attr_name_only then
-			selector.data[attr_name_only] = true
-			if not descriptor then table.insert(selector.data, attr_name_only) end
-		elseif descriptor then
-			local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*(=)%s*(.-)$')
-			if not name or op~='=' then
-				self.warn(("ZSS ignoring invalid data assignment '%s' in item descriptor '%s'"):format(attr, selector_str))
-			else
-				selector.data[name] = self:eval(self:compile(val, sheetid, selector_str))
-			end
+			selector.data[attr_name_only] = ZSS.ANY_VALUE
 		else
-			local name, op, val = attr:match('^@?([%a_][%w_-]*)%s*([<=>])%s*(.-)$')
-			if not name then
-				self.warn(("WARNING: invalid attribute selector '%s' in '%s'; must be like [@name < 42]"):format(attr, selector_str))
-				return nil
+			local name, op, val = attr:match('^@([%a_][%w_-]*)%s*(==)%s*(.-)$')
+			if name then
+				local value = self:eval(self:compile(val, sheetid, selector_str))
+				selector.data[name] = value==nil and ZSS.NIL_VALUE or value
 			else
-				selector.data[name] = { op=op, value=self:eval(self:compile(val, sheetid, selector_str)) }
-				table.insert(selector.data, name)
+				selector.data[attr] = self:compile(attr, sheetid, selector_str)
 			end
 		end
 	end
@@ -217,7 +206,7 @@ function ZSS:add(css, sheetid)
 					selector.type and 1 or 0,
 					0 -- the document order will be determined during updaterules()
 				}
-				local rule = {selector=selector, declarations=blocks, doc=sheetid}
+				local rule = {selector=selector, declarations=blocks, doc=sheetid, selectorstr=selector_str}
 				table.insert(self._rules[sheetid], rule)
 			end
 		end
@@ -240,10 +229,30 @@ function ZSS:match(el)
 	-- TODO: instead of blindly running through all active rules, maintain lists of active rules indexed by type and id and only run through lists that might apply.
 	-- Benchmark before and after to ensure that the complexity and overhead of list maintenance is acceptable.
 	for _,rule in ipairs(self._active) do
-		if ZSS.matches(rule.selector, el) then
+		local sel = rule.selector
+		if (not sel.id or el.id==sel.id) and (not sel.type or el.type==sel.type) then
+			for tag,_ in pairs(sel.tags) do
+				-- TODO: handle anti-tags in the selector, where _==false
+				if not (el.tags and el.tags[tag]) then goto skiprule end
+			end
+			for name,desired in pairs(sel.data) do
+				if type(desired)=='table' and desired.zssblock then
+					if not self:eval(desired, el, true) then goto skiprule end
+				else
+					local actual = el[name]
+					if desired==ZSS.NIL_VALUE then
+						if actual~=nil then goto skiprule end
+					elseif desired==ZSS.ANY_VALUE then
+						if actual==nil then goto skiprule end
+					else
+						if actual~=desired then goto skiprule end
+					end
+				end
+			end
 			for k,block in pairs(rule.declarations) do
 				computed[k] = block
 			end
+			::skiprule::
 		end
 	end
 
@@ -256,28 +265,6 @@ function ZSS:match(el)
 		result[k] = self:eval(block, el)
 	end
 	return result
-end
-
--- Test to see if an element matches a specific selector table
-function ZSS.matches(selector, el)
-	if selector.type and el.type~=selector.type then return false end
-	if selector.id   and el.id~=selector.id     then return false end
-	for _,tag in ipairs(selector.tags) do
-		if not (el.tags and el.tags[tag]) then return false end
-	end
-	for _,name in ipairs(selector.data) do
-		local val = el[name]
-		if val==nil then return false end
-
-		local attr = selector.data[name]
-		if attr~=true then
-			if     attr.op=='=' then if attr.value~=val then return false end
-			elseif attr.op=='<' then if attr.value<=val then return false end
-			elseif attr.op=='>' then if attr.value>=val then return false end
-			end
-		end
-	end
-	return true
 end
 
 function ZSS:extend(...)

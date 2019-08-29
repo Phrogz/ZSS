@@ -1,6 +1,7 @@
 package.path = '../?.lua;' .. package.path
 local print=print
 
+-- Hide all output from the library
 local function devnull() end
 zss = require'zss'
 zss.debug = devnull
@@ -293,8 +294,8 @@ function test.functions_with_placeholders()
 	local style = zss:new{
 		constants = { add=function(a,b) return a+b end },
 		basecss   = [[
-			a[@x=17] { p1:add(25,@x) }
-			a[@x=25] { p2:add(17,@x) }
+			a[@x==17] { p1:add(25,@x) }
+			a[@x==25] { p2:add(17,@x) }
 		]]
 	}
 	assertEqual(style:match{type='a', x=17}.p1, 42)
@@ -380,23 +381,26 @@ end
 
 function test.matching_attr()
 	local style = zss:new():constants{x=42}:add[[
-		*       { c:true }
-		*[@x]   { x:@x   }
-		t[@x<5] { op:'<' }
-		t[@x>5] { op:'>' }
-		t[@x=5] { op:'=' }
-		t[5<@x] { po:'>' }
-		t[5>@x] { po:'<' }
-		t[5=@x] { po:'=' }
+		*        { c:true }
+		*[@x]    { x:@x   }
+		t[@x<5]  { op:'<' }
+		t[@x>5]  { op:'>' }
+		t[@x==5] { op:'=' }
+		t[5<@x]  { po:'>' }
+		t[5>@x]  { po:'<' }
+		t[5==@x] { po:'=' }
 	]]
 
 	assertEqual(style:match{type='z'}.c, true)
 	assertNil(style:match{type='z'}.x,              'constants must not leak as attributes')
 	assertEqual(style:match{type='z', x=17}.x,  17, 'can find attributes')
 	assertNil(style:match{type='z', x=17}.op,       'attributes must not ignore other selectors')
-	assertEqual(style:match{type='t', x=5}.op, '=', '[@foo=42] works')
+	assertEqual(style:match{type='t', x=5}.op, '=', '[@foo==42] works')
 	assertEqual(style:match{type='t', x=9}.op, '>', '[@foo>42] works')
 	assertEqual(style:match{type='t', x=1}.op, '<', '[@foo<42] works')
+	assertEqual(style:match{type='t', x=5}.po, '=', '[42==@foo] works')
+	assertEqual(style:match{type='t', x=9}.po, '>', '[42<@foo] works')
+	assertEqual(style:match{type='t', x=1}.po, '<', '[42>@foo] works')
 end
 
 function test.parsing_functions()
@@ -412,12 +416,13 @@ end
 function test.invalid_selectors()
 	local style = zss:new():add[[
 		t, t2     { x:'OK' }
-		t[5<@x]   { x:'no' }
+		t[5!@x]   { x:'no' }
 		t[5=@x]   { x:'no' }
+		t[@x=5]   { x:'no' }
 		t[5>@x]   { x:'no' }
-		t[true]   { x:'no' }
-		t[17]     { x:'no' }
-		t['@x<5'] { x:'no' }
+		t[true]   { x:'OK' }
+		t[17]     { x:'OK' }
+		t['@x<5'] { x:'OK' }
 		!t2!      { x:'no' }
 		!t2       { x:'no' }
 		t2!       { x:'no' }
@@ -455,7 +460,7 @@ end
 function test.sketchy_parser()
 	local style = zss:new():add [[
 		e  { semi:'tl\x3Bdr'; right:'\x7D'; left:':\x7B'; at:'me\x40here.com' }
-		q[@v='\x7B\x40\x3B\x40\x7D'] { worked:true }
+		q[@v=='\x7B\x40\x3B\x40\x7D'] { worked:true }
 		a  { a:'}' }
 		b  { b:';'; c:'c' }
 	]]
@@ -465,7 +470,6 @@ function test.sketchy_parser()
 	assertEqual(style:match{type='e'}.right, '}', 'parsing accepts escaped right brace')
 	assertEqual(style:match{type='e'}.left, ':{', 'parsing accepts escaped left brace')
 	assertEqual(style:match{type='e'}.at, 'me@here.com', 'parsing accepts escaped at symbol')
-
 	assertEqual(style:match{type='q', v='{@;@}'}.worked, true, 'should be able to parse declaration with escaped characters in the selector')
 
 	assertEqual(style:match{type='a'}.a, '}', 'should be able to parse declaration with "}" in string')
