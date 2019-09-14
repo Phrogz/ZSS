@@ -254,6 +254,21 @@ function test.functions_nested()
 	assertEqual(style:match{type='c', x=17, y=16, z=15}.p, 48, 'nested placeholder functions are properly parsed and run')
 end
 
+function test.precedence()
+	local style = zss:new{
+		basecss = [[
+			a         { a:1; b:1           }
+			a.foo.bar {      b:2; c:2      }
+			a.bar     {           c:3; d:3 }
+		]]
+	}
+	local result = style:match{type='a', tags={foo=1, bar=1}}
+	assertEqual(result.a, 1, 'first rule is matched')
+	assertEqual(result.b, 2, 'second rule is matched')
+	assertEqual(result.d, 3, 'third rule is matched')
+	assertEqual(result.c, 2, 'more tags takes precedence over fewer')
+end
+
 function test.functions_with_placeholders()
 	local ct1, ct2 = 0,0
 	local style = zss:new{

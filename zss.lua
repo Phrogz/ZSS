@@ -123,17 +123,18 @@ function ZSS:eval(block, data, ignorecache)
 end
 
 -- Convert a selector string into its component pieces;
--- descriptor=true parses an element descriptor (skips some steps)
 function ZSS:parse_selector(selector_str, sheetid)
 	local selector = {
 		type = selector_str:match('^@?[%a_][%w_-]*'),
 		id  = selector_str:match('#([%a_][%w_-]*)'),
 		tags={}, data={}
 	}
+	local tagrank = 0
 
 	-- Find all the tags
 	for name in selector_str:gmatch('%.([%a_][%w_-]*)') do
 		selector.tags[name] = true
+		tagrank = tagrank + 1
 	end
 
 	-- Find all attribute sections, e.g. [@attr], [@attr<17], [attr=12], …
@@ -141,6 +142,7 @@ function ZSS:parse_selector(selector_str, sheetid)
 		local attr_name_only = attr:match('^@?([%a_][%w_-]*)$')
 		if attr_name_only then
 			selector.data[attr_name_only] = ZSS.ANY_VALUE
+			tagrank = tagrank + 1
 		else
 			local name, op, val = attr:match('^@([%a_][%w_-]*)%s*(==)%s*(.-)$')
 			if name then
@@ -149,10 +151,17 @@ function ZSS:parse_selector(selector_str, sheetid)
 			else
 				selector.data[attr] = self:compile(attr, sheetid, selector_str)
 			end
+			-- attribute selectors with comparisons count slightly more than bare attributes or tags
+			tagrank = tagrank + 1.001
 		end
 	end
 
-	if not descriptor then table.sort(selector.data) end
+	selector.rank = {
+		selector.id and 1 or 0,
+		tagrank,
+		selector.type and 1 or 0,
+		0 -- the document order will be determined during updaterules()
+	}
 
 	return selector
 end
@@ -200,12 +209,6 @@ function ZSS:add(css, sheetid)
 
 			local selector = self:parse_selector(selector_str:match "^%s*(.-)%s*$", sheetid)
 			if selector then
-				selector.rank = {
-					selector.id and 1 or 0,
-					#selector.tags + #selector.data,
-					selector.type and 1 or 0,
-					0 -- the document order will be determined during updaterules()
-				}
 				local rule = {selector=selector, declarations=blocks, doc=sheetid, selectorstr=selector_str}
 				table.insert(self._rules[sheetid], rule)
 			end
