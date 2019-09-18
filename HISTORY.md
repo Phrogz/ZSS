@@ -1,5 +1,10 @@
 # History
 
+## v1.0.1 — September 17th, 2019
+
+* Speed improvement to matching (2✕ in the common case)
+
+
 ## v1.0 — August 29th, 2019
 
 ### New Features

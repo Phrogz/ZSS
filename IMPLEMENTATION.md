@@ -4,7 +4,7 @@ A **style** is an instance of ZSS.
 
 An **extension** is a style that inherits from another, _**base**_ style.
 
-A single style may load multiple **sheet** (aka **stylesheets**): text blocks with CSS-like syntax.
+A single style may load multiple **sheets** (aka **stylesheets**): text blocks with CSS-like syntax.
 
 A sheet is composed of **directives** (aka **at-rules**) (e.g. `@vars { x:25 }`) and **rules** (e.g. `foo, bar { a:17; b:x+a }`):
 
@@ -39,7 +39,7 @@ When a block used in a match, its cached value is returned if available. If not 
 * Blocks are marked do-not-cache if the expression leads with an exclamation point (as a feature).
 * Blocks are marked do-not-cache if the expression includes an `@data` reference (under the assumption that the data variables will change frequently).
 * Blocks' caches are invalidated when sheets are disabled or enabled (in case the block happens to rely on a sheet variable from a previous sheet).
-* Blocks' caches are invalidated when style constants change (in case the block happens to rely on a style constant). 
+* Blocks' caches are invalidated when style constants change (in case the block happens to rely on a style constant).
 
 
 # Future Possibilities

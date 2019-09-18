@@ -1,11 +1,11 @@
 --[=========================================================================[
-   ZSS v1.0
+   ZSS v1.0.1
    See http://github.com/Phrogz/ZSS for usage documentation.
    Licensed under MIT License.
    See https://opensource.org/licenses/MIT for details.
 --]=========================================================================]
 
-local ZSS = { VERSION="1.0", debug=print, info=print, warn=print, error=print, ANY_VALUE={}, NIL_VALUE={} }
+local ZSS = { VERSION="1.0.1", debug=print, info=print, warn=print, error=print, ANY_VALUE={}, NIL_VALUE={} }
 
 local updaterules, updateconstantschain, dirtyblocks
 
@@ -24,7 +24,7 @@ function ZSS:new(opts)
 		_sheetblocks = {}, -- map of sheetid to table of blocks underlying the constants
 		_envs        = {}, -- map of sheetid to table that mutates to evaluate functions
 		_rules       = {}, -- map of sheetids to array of rule tables, each sorted by document order
-		_active      = {}, -- array of rule tables for active sheets, sorted by specificity (rank)
+		_lookup      = {}, -- rules for active sheets indexed by type, then by id (with 'false' indicating no type or id)
 		_kids        = setmetatable({},{__mode='k'}), -- set of child tables mapped to true
 		_parent      = nil, -- reference to the style instance that spawned this one
 	}
@@ -125,8 +125,8 @@ end
 -- Convert a selector string into its component pieces;
 function ZSS:parse_selector(selector_str, sheetid)
 	local selector = {
-		type = selector_str:match('^@?[%a_][%w_-]*'),
-		id  = selector_str:match('#([%a_][%w_-]*)'),
+		type = selector_str:match('^@?[%a_][%w_-]*') or false,
+		id  = selector_str:match('#([%a_][%w_-]*)') or false,
 		tags={}, data={}
 	}
 	local tagrank = 0
@@ -228,12 +228,11 @@ end
 function ZSS:match(el)
 	local placeholders, data
 
-	local computed = {}
-	-- TODO: instead of blindly running through all active rules, maintain lists of active rules indexed by type and id and only run through lists that might apply.
-	-- Benchmark before and after to ensure that the complexity and overhead of list maintenance is acceptable.
-	for _,rule in ipairs(self._active) do
-		local sel = rule.selector
-		if (not sel.id or el.id==sel.id) and (not sel.type or el.type==sel.type) then
+	local result, sortedrules, ct = {}, {}, 0
+
+	local function checkrules(rules)
+		for _,rule in ipairs(rules) do
+			local sel = rule.selector
 			for tag,_ in pairs(sel.tags) do
 				-- TODO: handle anti-tags in the selector, where _==false
 				if not (el.tags and el.tags[tag]) then goto skiprule end
@@ -252,21 +251,60 @@ function ZSS:match(el)
 					end
 				end
 			end
-			for k,block in pairs(rule.declarations) do
-				computed[k] = block
-			end
+			ct = ct + 1
+			sortedrules[ct] = rule
 			::skiprule::
 		end
 	end
 
-	-- TODO: consider how to possibly re-instate the computed caches, while allowing elements to be mutated.
-	-- Perhaps cache per element table, but allow passing a flag to ignore the cache?
+	local function addfortype(byid)
+		if el.id and byid[el.id] then addforid(byid[el.id]) end
+		if byid[false] then addforid(byid[false]) end
+	end
+
+	-- check rules that specify this element's type
+	local byid = el.type and self._lookup[el.type]
+	if byid then
+		-- check rules that specify this element's id
+		if el.id and byid[el.id] then checkrules(byid[el.id]) end
+
+		-- check rules that don't care about the element id
+		if byid[false] then checkrules(byid[false]) end
+	end
+
+	-- check rules that don't care about the element type
+	local byid = self._lookup[false]
+	if byid then
+		-- check rules that specify this element's id
+		if el.id and byid[el.id] then checkrules(byid[el.id]) end
+
+		-- check rules that don't care about the element id
+		if byid[false] then checkrules(byid[false]) end
+	end
+
+	if ct>1 then
+		table.sort(sortedrules, function(r1, r2)
+			r1,r2 = r1.selector.rank,r2.selector.rank
+			if     r1[1]<r2[1] then return true elseif r1[1]>r2[1] then return false
+			elseif r1[2]<r2[2] then return true elseif r1[2]>r2[2] then return false
+			elseif r1[3]<r2[3] then return true elseif r1[3]>r2[3] then return false
+			elseif r1[4]<r2[4] then return true else                    return false
+			end
+		end)
+	end
+
+	-- merge the declarations from the rules in order
+	for _,rule in ipairs(sortedrules) do
+		for k,block in pairs(rule.declarations) do
+			result[k] = block
+		end
+	end
 
 	-- Convert blocks to values (honoring cached values)
-	local result = {}
-	for k,block in pairs(computed) do
+	for k,block in pairs(result) do
 		result[k] = self:eval(block, el)
 	end
+
 	return result
 end
 
@@ -330,38 +368,56 @@ function ZSS:enable(sheetid)
 end
 
 updaterules = function(self)
-	-- reset the computed and active rule list
-	self._active = {}
+	-- reset the lookup cache
+	self._lookup = {}
+	local rulesadded = 0
 
-	-- assume that the parent's active is already up-to-date
+	-- add all rules from the parent style
 	if self._parent then
-		for i,rule in ipairs(self._parent._active) do
-			-- do not use parent's active if we overrode it
-			if self._sheets[rule.doc]~=false then
-				table.insert(self._active, rule)
+		for type,rulesfortype in pairs(self._parent._lookup) do
+			local byid = self._lookup[type]
+			if not byid then
+				byid = {}
+				self._lookup[type] = byid
+			end
+			for id,rulesforid in pairs(rulesfortype) do
+				local rules = byid[id]
+				if not rules then
+					rules = {}
+					byid[id] = rules
+				end
+				for i=1,#rulesforid do
+					local rule = rulesforid[i]
+					-- do not use rule if we set its document inactive
+					if self._sheets[rule.doc]~=false then
+						rules[#rules+1] = rule
+						rulesadded = rulesadded + 1
+					end
+				end
 			end
 		end
 	end
 
-	-- add all the rules from the active documents
+	-- add all the rules from this style's active sheets
 	for _,sheetid in ipairs(self._sheets) do
 		if self._sheets[sheetid] then
 			for _,rule in ipairs(self._rules[sheetid]) do
-				table.insert(self._active, rule)
-				rule.selector.rank[4] = #self._active
+				local byid = self._lookup[rule.selector.type]
+				if not byid then
+					byid = {}
+					self._lookup[rule.selector.type] = byid
+				end
+				local rulesforid = byid[rule.selector.id]
+				if not rulesforid then
+					rulesforid = {}
+					byid[rule.selector.id] = rulesforid
+				end
+				rulesforid[#rulesforid+1] = rule
+				rulesadded = rulesadded + 1
+				rule.selector.rank[4] = rulesadded
 			end
 		end
 	end
-
-	-- sort the active rules by rank
-	table.sort(self._active, function(r1, r2)
-		r1,r2 = r1.selector.rank,r2.selector.rank
-		if     r1[1]<r2[1] then return true elseif r1[1]>r2[1] then return false
-		elseif r1[2]<r2[2] then return true elseif r1[2]>r2[2] then return false
-		elseif r1[3]<r2[3] then return true elseif r1[3]>r2[3] then return false
-		elseif r1[4]<r2[4] then return true else                    return false
-		end
-	end)
 
 	-- ensure that any extended children are updated
 	for kid,_ in pairs(self._kids) do
